@@ -1,0 +1,43 @@
+version: '3.8'
+
+services:
+  spark:
+    image: jupyter/pyspark-notebook:spark-3.5.0
+    container_name: tfm-spark
+    environment:
+      - PYTHONPATH=/usr/local/spark/python:/usr/local/spark/python/lib/py4j-0.10.9.7-src.zip
+    ports:
+      - "8888:8888"
+    volumes:
+      - ./src:/home/jovyan/src
+    networks:
+      - tfm-network
+
+  mongo:
+    image: mongo:7.0
+    container_name: tfm-mongo
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+    networks:
+      - tfm-network
+
+  mongo-express:
+    image: mongo-express:1.0
+    container_name: tfm-mongo-express
+    ports:
+      - "8081:8081"
+    environment:
+      - ME_CONFIG_MONGODB_SERVER=mongo
+    depends_on:
+      - mongo
+    networks:
+      - tfm-network
+
+networks:
+  tfm-network:
+    driver: bridge
+
+volumes:
+  mongo-data:
