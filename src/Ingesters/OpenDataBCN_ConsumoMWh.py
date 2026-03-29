@@ -6,6 +6,9 @@ import time
 import pandas as pd
 from functools import reduce
 from pyspark.sql import DataFrame
+import io
+from pymongo import MongoClient
+
 
 
 ############ PASO 1 SESION SPARK #################################
@@ -13,7 +16,7 @@ from pyspark.sql import DataFrame
 spark = SparkSession.builder.appName("OpenDataBCNMWh")\
                             .getOrCreate()
 print(f"Spark Version: {spark.version}")
-print("Spark session has been created")
+print("Spark session created")
 
 ################################# PASO 2 OBTENER CATALOGO #################################
 
@@ -70,26 +73,35 @@ for reg in registros:
 
 ############## PASO 3.5 DESCARGAR Y LEER CSVs CON SPARK #################################
 
-import io
-
-dfs = []
+open_data_csvs = []
 
 for res in resources:
-    if res.get("url") and "2025" not in res["name"]:  # 2025 no tiene API disponible aún
+    if res.get("url") and "2026" not in res["name"]:
         print(f"Descargando {res['name']}...")
-        response = requests.get(res["url"])
-        
-        #  CSV con pandas desde memoria a Spark
-        dfPandas = pd.read_csv(io.StringIO(response.text))
-        dfSpark_year = spark.createDataFrame(dfPandas)
-        dfs.append(dfSpark_year)
-        time.sleep(1)  # Respetar el servidor
+
+        for attempt in range(3):
+            try:
+                response = requests.get(res["url"], timeout=120)
+                response.raise_for_status()
+                dfPandas = pd.read_csv(io.BytesIO(response.content), encoding="utf-8")
+                dfSpark_year = spark.createDataFrame(dfPandas)
+                open_data_csvs.append(dfSpark_year)
+                print(f"  OK - {len(dfPandas):,} registros")
+                break
+            except Exception as e:
+                print(f"Intento {attempt + 1} falló: {e}")
+                if attempt < 2:
+                    time.sleep(5)
+                else:
+                    print(f"  SKIP: {res['name']}")
+
+        time.sleep(1)
 
 # Unir todos los años en un solo DataFrame
 
 
-dfSpark = reduce(DataFrame.unionByName, dfs)
-print(f"Total registros todos los años: {dfSpark.count():,}")
+df_spark = reduce(DataFrame.unionByName, open_data_csvs) #reduce aplica función unionByBame
+print(f"Total registros todos los años: {df_spark.count():,}")
 
 ################################# PASO 4 DATOS A DF SPARK #################################
 
@@ -100,24 +112,29 @@ print(f"Total registros todos los años: {dfSpark.count():,}")
 #dfSpark.show(truncate = False)
 
 print("Schema:")
-dfSpark.printSchema()
+df_spark.printSchema()
 
-print(f"Filas: {dfSpark.count()}")
+print(f"Filas: {df_spark.count()}")
 
 
 ################## PASO 5 TRANSFORMACIONES #################################
 
-dfSpark = (
-    dfSpark
-    .withColumn("Valor", col("Valor").cast("integer"))
-    .withColumn("Data", to_date(col("Data")))
-    .withColumn("Codi_Postal", lpad(col("Codi_Postal"), 5, "0"))
+df_spark = (
+    df_spark
+    .withColumn("MWh", col("Valor").cast("integer"))
+    .withColumn("Fecha", to_date(col("Data")))
+    .withColumn("Codigo_Postal", lpad(col("Codi_Postal"), 5, "0"))
     .drop("Any")
 )
 
-dfSpark.show(truncate=False)
-dfSpark.printSchema()
-dfSpark.count()
+df_spark.show(truncate=False)
+df_spark.printSchema()
+df_spark.count()
 
 ################################# PASO 6 Escribir Mongos #################################
+
+#client = MongoClient("mongodb://localhost:27017/") #Servidor local
+#db = client["TFM"] #DataBase
+#collection = db["Consumo_MWh_BCN"] #Tabla
+
 spark.stop()
