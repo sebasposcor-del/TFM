@@ -3,7 +3,9 @@ version: '3.8'
 services:
   spark:
     build:
-    image: jupyter/pyspark-notebook:spark-3.5.0
+      context: .
+      dockerfile: Dockerfile
+
     container_name: tfm-spark
     environment:
       - PYTHONPATH=/usr/local/spark/python:/usr/local/spark/python/lib/py4j-0.10.9.7-src.zip
