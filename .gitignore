@@ -1,0 +1,53 @@
+
+# TFM - Sistema de Predicción Energética BCN
+
+# ---------- Credenciales y entorno ----------
+.env
+.env.*
+!.env.example
+
+# ---------- Datos descargados ---------------
+data/
+*.csv
+*.xlsx
+*.parquet
+*.json
+!requirements.txt
+!pyproject.toml
+
+# ---------- Python bytecode -----------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+
+# ---------- Jupyter -------------------------
+.ipynb_checkpoints/
+*.ipynb
+
+# ---------- Cachés de herramientas ----------
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+
+# ---------- IDEs ----------------------------
+.vscode/
+!.devcontainer/
+.idea/
+
+# ---------- Sistema operativo ---------------
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ---------- Docker (logs locales) -----------
+*.log
+
+# ---------- Spark / Hadoop ------------------
+spark-warehouse/
+metastore_db/
+derby.log
