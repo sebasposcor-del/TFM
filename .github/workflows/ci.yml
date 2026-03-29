@@ -1,0 +1,54 @@
+
+# TFM - Energy Prediction & Early Warning BCN
+# CI Pipeline - Run this verifications on every push
+
+
+name: CI
+
+# Every time we push to main or dev, but not if push on other branches
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+# Define the jobs to run in this workflow
+jobs:
+  quality: #this specific job is for code quality checks
+    runs-on: ubuntu-latest #Github borrows a Linux VM to run this workflow and then disposes of it, so we always start with a clean environment
+
+    steps:
+    #Uses vs Run commands: "uses" is for predefined actions created by the community, while "run" is for custom commands we want to execute directly in the workflow.
+      # 1. Download the repo code in the VM
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # 2. Install Python
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # 3. Install dependencies
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # 4. Check code formatting
+      - name: Black (formatter check)
+        run: black --check src/
+
+      # 5. Check import order
+      - name: isort (import order check)
+        run: isort --check src/
+
+      # 6. Analyze code quality
+      - name: Pylint (code analysis)
+        run: pylint src/ --fail-under=7.0
+
+      # 7. Check type consistency
+      - name: Mypy (type check)
+        run: mypy src/ --ignore-missing-imports
+
+      # 8. Run tests
+      - name: Pytest (unit tests)
+        run: pytest src/tests/ -v

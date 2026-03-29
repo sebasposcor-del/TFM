@@ -2,6 +2,7 @@ version: '3.8'
 
 services:
   spark:
+    build:
     image: jupyter/pyspark-notebook:spark-3.5.0
     container_name: tfm-spark
     environment:
