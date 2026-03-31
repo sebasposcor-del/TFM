@@ -10,6 +10,7 @@ services:
       - PYTHONPATH=/home/app/src
     volumes:
       - ./src:/home/app/src
+      - ./pyproject.toml:/home/app/pyproject.toml
     networks:
       - tfm-network
     tty: true

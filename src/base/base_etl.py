@@ -1,4 +1,5 @@
 """Pipeline ETL para consumo eléctrico de Barcelona."""
+
 from abc import ABC, abstractmethod
 
 import polars as pl
@@ -15,7 +16,9 @@ class BaseETL(ABC):
     """Clase base para procesos ETL,
     define la estructura y métodos comunes para los ingesters"""
 
-    def __init__(self, mongo_uri: str = "mongodb://mongo:27017/", db_name: str = "tfm_energy"):
+    def __init__(
+        self, mongo_uri: str = "mongodb://mongo:27017/", db_name: str = "tfm_energy"
+    ):
         """Constructor de clase, es el metodo qeu se ejecuta automáticamente
         cuando se llama una clase que hereda este ETL base
            - self es la referencia al propio objeto"""
@@ -23,7 +26,8 @@ class BaseETL(ABC):
         self.db = self.client[db_name]
         self.logger = get_logger(
             self.__class__.__name__
-        )  # Crea un logger específico para cada clase que herede de BaseETL, usando el nombre de la clase como nombre del logger
+        )  # Crea un logger específico para cada clase que herede de BaseETL,
+            #usando el nombre de la clase como nombre del logger
 
     @abstractmethod  # decoder que obliga a clases hijas a implementarlo
     def extract(self) -> pl.DataFrame:
@@ -44,7 +48,8 @@ class BaseETL(ABC):
         """
 
     def run(self) -> None:
-        """Orquesta el pipeline ETL, llamando a los métodos en orden: extract, transform, load_raw, load_clean"""
+        """Orquesta el pipeline ETL, llamando a los métodos en orden:
+          extract, transform, load_raw, load_clean"""
         self.logger.info("Iniciando  ETL...")
 
         raw_pl = self.extract()

@@ -22,7 +22,7 @@ disable = [
 ]
 
 [tool.pylint.format]
-max-line-length = 88
+max-line-length = 100
 
 # ---------- MYPY (type checker) -------------
 [tool.mypy]
