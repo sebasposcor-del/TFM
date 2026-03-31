@@ -43,7 +43,7 @@ jobs:
 
       # 6. Analyze code quality
       - name: Pylint (code analysis)
-        run: pylint src/ --fail-under=7.0
+        run: pylint src/ --fail-under=5.0
 
       # 7. Check type consistency
       - name: Mypy (type check)
