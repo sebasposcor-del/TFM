@@ -1,5 +1,3 @@
-import logging
-import sys
 from abc import ABC, abstractmethod
 from email import utils
 
@@ -32,24 +30,20 @@ class BaseETL(ABC):
     @abstractmethod  # decoder que obliga a clases hijas a implementarlo
     def extract(self) -> pl.DataFrame:
         """Método que descarga data de fuente,devuelve un dataFrame raw,"""
-        pass
 
     @abstractmethod
     def transform(self, df: pl.DataFrame) -> pl.DataFrame:
         """Método que limpia y transforma el dataFrame raw, devuelve un dataFrame limpio"""
-        pass
 
     @abstractmethod
     def load_raw(self, df: pl.DataFrame) -> None:
         """Método que carga el dataFrame raw a la base de datos"""
-        pass
 
     @abstractmethod
     def load_clean(self, df: pl.DataFrame) -> None:
         """
         Método que carga el dataFrame limpio a la base de datos
         """
-        pass
 
     def run(self) -> None:
         """Orquesta el pipeline ETL, llamando a los métodos en orden: extract, transform, load_raw, load_clean"""
