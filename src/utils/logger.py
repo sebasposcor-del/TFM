@@ -1,3 +1,4 @@
+"""Pipeline ETL para consumo eléctrico de Barcelona."""
 import logging
 import sys  # Para que mpirma en la consola
 
