@@ -1,17 +1,16 @@
 {
-    "name": "TFM Spark",
+    "name": "TFM Energy BCN",
     "dockerComposeFile": "../docker-compose.yml",
-    "service": "spark",
-    "workspaceFolder": "/home/jovyan/src",
+    "service": "app",
+    "workspaceFolder": "/home/app/src",
     "customizations": {
         "vscode": {
             "extensions": [
                 "ms-python.python",
-                "ms-python.pylint",
-                "ms-toolsai.jupyter"
+                "ms-python.pylint"
             ],
             "settings": {
-                "python.defaultInterpreterPath": "/opt/conda/bin/python"
+                "python.defaultInterpreterPath": "/usr/local/bin/python"
             }
         }
     }
