@@ -1,12 +1,11 @@
+"""Pipeline ETL para consumo eléctrico de Barcelona."""
 import io
 import time
 
 import polars as pl
 import requests
-from pymongo import MongoClient
 
 from base.base_etl import BaseETL
-from utils.logger import get_logger
 
 
 class OpenDataBcnIngester(BaseETL):
@@ -27,7 +26,7 @@ class OpenDataBcnIngester(BaseETL):
         """Descarga los csvs de Open Data BCN, los une y devuelve un DataFrame raw"""
         # Qué recibo, que hago?, que devuelvo?
         # 1. Llamo api
-        response = requests.get(self.catalog_url)
+        response = requests.get(self.catalog_url, timeout=120)
         response.raise_for_status()
         energy_data = response.json()
 
@@ -41,9 +40,7 @@ class OpenDataBcnIngester(BaseETL):
         od_bcn_csvs = []
         for res in resources:
             if not res.get("url"):
-                self.logger.warning(
-                    f"Recurso {res['name']} no tiene url, no se descargará"
-                )
+                self.logger.warning(f"Recurso {res['name']} no tiene url, no se descargará")
                 continue
 
             for attempt in range(3):
