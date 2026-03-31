@@ -3,13 +3,13 @@
 
 # ---------- BLACK (formatter) ---------------
 [tool.black]
-line-length = 88
+line-length = 100
 target-version = ["py311"]
 
 # ---------- ISORT (import sorter) -----------
 [tool.isort]
 profile = "black"
-line_length = 88
+line_length = 100
 
 # ---------- PYLINT (code analyzer) ----------
 [tool.pylint.messages_control]
