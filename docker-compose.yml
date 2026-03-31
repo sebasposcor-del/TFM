@@ -1,20 +1,16 @@
 version: '3.8'
 
 services:
-  spark:
+  app:
     build:
       context: .
       dockerfile: Dockerfile
-
-    container_name: tfm-spark
-    environment:
-      - PYTHONPATH=/usr/local/spark/python:/usr/local/spark/python/lib/py4j-0.10.9.7-src.zip
-    ports:
-      - "8888:8888"
+    container_name: tfm-app
     volumes:
-      - ./src:/home/jovyan/src
+      - ./src:/home/app/src
     networks:
       - tfm-network
+    tty: true
 
   mongo:
     image: mongo:7.0

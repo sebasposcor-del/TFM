@@ -1,11 +1,10 @@
 # TFM - Sistema de Predicción Energética BCN
- 
+
 # ---------- ETL y datos ---------------------
 requests==2.32.3
-pandas==2.2.3
-openpyxl==3.1.5
+polars==1.27.0
 pymongo==4.10.1
- 
+
 # ---------- Calidad de código (CI) ----------
 black==24.10.0
 isort==5.13.2

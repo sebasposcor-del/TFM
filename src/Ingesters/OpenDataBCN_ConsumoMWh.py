@@ -1,5 +1,5 @@
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import col, to_date, lpad
+from pyspark.sql.functions import col, lit, to_date, lpad, regexp_extract
 import json
 import requests
 import time
@@ -103,6 +103,7 @@ for res in resources:
 df_spark = reduce(DataFrame.unionByName, open_data_csvs) #reduce aplica función unionByBame
 print(f"Total registros todos los años: {df_spark.count():,}")
 
+df_spark.show(truncate=False)
 ################################# PASO 4 DATOS A DF SPARK #################################
 
 #dfPandas = pd.DataFrame(registros)
@@ -119,22 +120,38 @@ print(f"Filas: {df_spark.count()}")
 
 ################## PASO 5 TRANSFORMACIONES #################################
 
-df_spark = (
-    df_spark
-    .withColumn("MWh", col("Valor").cast("integer"))
-    .withColumn("Fecha", to_date(col("Data")))
-    .withColumn("Codigo_Postal", lpad(col("Codi_Postal"), 5, "0"))
-    .drop("Any")
-)
-
-df_spark.show(truncate=False)
-df_spark.printSchema()
-df_spark.count()
+#df_spark = (
+#    df_spark
+#    .withColumn("Hora Inicio", regexp_extract(col("Tram_Horari"), r"De (\d{2}:\d{2}:\d{2})", 1))
+#    .withColumn("Datetime", to_date(col("Data"), lit(" "), col("Hora Inicio"), format="dd/MM/yyyy HH:mm:ss"))
+#    .withColumn("Codigo_Postal", lpad(col("Codi_Postal"), 5, "0"))
+#    .withColumn("Sector Economico"), col("Sector_Economic").cast("string"))
+#    .withColumn("MWh", col("Valor").cast("integer"))
+#    .drop("Any")
+#    .
+#)
+#
+#df_spark.show(truncate=False)
+#df_spark.printSchema()
+#df_spark.count()
 
 ################################# PASO 6 Escribir Mongos #################################
 
-#client = MongoClient("mongodb://localhost:27017/") #Servidor local
-#db = client["TFM"] #DataBase
-#collection = db["Consumo_MWh_BCN"] #Tabla
+client = MongoClient("mongodb://mongo:27017/") #Servidor local
+db = client["tfm"] #DataBase
+collection = db["clean_electric_data"] #Tabla
+
+# El MongoDB Spark Connector es básicamente un JAR (un archivo Java) que le enseña a Spark a hablar con MongoDB de forma nativa.
+# Convertir DataFrame de Spark a Pandas para insertar en MongoDB
+df_pandas = df_spark.toPandas()
+registros = df_pandas.to_dict("records")
+
+print(df_pandas.head() )
+print(registros[:5])
+
+# Insertar registros en MongoDB
+#collection.insert_many(registros)
+#print(f"Rows Insertados: {len(regristros) :, }")
+
 
 spark.stop()
