@@ -6,6 +6,8 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: tfm-app
+    environment:
+      - PYTHONPATH=/home/app/src
     volumes:
       - ./src:/home/app/src
     networks:
