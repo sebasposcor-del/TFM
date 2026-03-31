@@ -41,9 +41,7 @@ class OpenDataBcnIngester(BaseETL):
         od_bcn_csvs = []
         for res in resources:
             if not res.get("url"):
-                self.logger.warning(
-                    f"Recurso {res['name']} no tiene url, no se descargará"
-                )
+                self.logger.warning(f"Recurso {res['name']} no tiene url, no se descargará")
                 continue
 
             for attempt in range(3):
