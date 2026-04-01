@@ -4,6 +4,7 @@ import io
 import time
 
 import polars as pl
+from pymongo import UpdateOne
 import requests
 
 from base.base_etl import BaseETL
@@ -22,6 +23,11 @@ class OpenDataBcnIngester(BaseETL):
 
         self.raw_collection = self.db["raw_electricity"]
         self.clean_collection = self.db["clean_electricity"]
+        #Index para uniqueness
+        self.clean_collection.create_index(
+            [("Datetime", 1), ("Codi_Postal", 1), ("Sector_Economic", 1)]
+            , unique=True
+            ) 
 
     def extract(self) -> pl.DataFrame:
         """Descarga los csvs de Open Data BCN, los une y devuelve un DataFrame raw"""
@@ -49,7 +55,8 @@ class OpenDataBcnIngester(BaseETL):
                     response = requests.get(res["url"], timeout=120)
                     response.raise_for_status()
                     # content son los bytes crudos del csv
-                    # BytesIO envuelve  esos bytes en un objeto similar a un archivo que polars puede leer directamente sin necesidad de escribirlo en disco
+                    # BytesIO envuelve  esos bytes en un objeto similar a un archivo
+                    #  que polars puede leer directamente sin necesidad de escribirlo en disco
                     od_bcn_year = pl.read_csv(io.BytesIO(response.content))
                     od_bcn_csvs.append(od_bcn_year)
                     self.logger.info(f"Descargado recurso {res['name']} con éxito")
@@ -116,13 +123,62 @@ class OpenDataBcnIngester(BaseETL):
         return raw_od_bcn
 
     def load_clean(self, df: pl.DataFrame) -> None:
-        self.logger.info("Guardando datos limpios en MongoDB...")
-        self.clean_collection.drop()  # Elimina la colección antes de insertar nuevos datos para evitar duplicados
-        self.clean_collection.insert_many(
-            df.to_dicts()
-        )  # Convierte el DataFrame a una lista de diccionarios y los inserta en MongoDB
-        self.logger.info(f"Clean completado: {len(df):,} registros")
 
+
+        self.logger.info("Guardando datos limpios en MongoDB (upsert)...")
+
+        # Convierte el DataFrame de Polars a una lista de diccionarios
+        # Cada dict es un registro: {"Datetime": ..., "Codi_Postal": ..., "Sector_Economic": ..., "MWh": ...}
+        records = df.to_dicts()
+
+        # Tamaño de cada lote: procesamos 10,000 registros a la vez
+        batch_size = 10000
+
+        # Contadores globales para el log final
+        total_inserted = 0
+        total_modified = 0
+
+        # Recorre los registros de 10,000 en 10,000
+        # Con 1.17M registros, 117 batches
+        # i toma valores: 0, 10000, 20000, 30000...
+        for i in range(0, len(records), batch_size):
+        
+            # Corta la lista desde i hasta i+10000
+            # Ejemplo: batch 1 = records[0:10000], batch 2 = records[10000:20000], etc.
+            batch = records[i : i + batch_size]
+
+            # Para cada registro del batch, crea una operación UpdateOne
+            operations = []
+            for rec in batch:
+                operations.append(
+                    UpdateOne( #Busca UN documento que coincida con  filtro. Si  encuentras, actualízalo. Si no, créalo.
+                    # 1er argumento: FILTRO — "busca un doc con esta clave compuesta"
+                        {
+                            "Datetime": rec["Datetime"],
+                            "Codi_Postal": rec["Codi_Postal"],
+                            "Sector_Economic": rec["Sector_Economic"],
+                        },
+                        # 2do argumento: ACCIÓN — "reemplaza estos campos con los valores nuevos"
+                        {"$set": rec},
+                        # 3er argumento: si no lo encuentra, créalo
+                        upsert=True,
+                )
+                )
+
+
+            # Envía las 10,000 operaciones a MongoDB en un solo viaje
+            result = self.clean_collection.bulk_write(operations)
+
+            # Acumula estadísticas
+            total_inserted += result.upserted_count
+            total_modified += result.modified_count
+
+    # Resumen final
+        self.logger.info(
+            f"Upsert completado — "
+            f"total insertados: {total_inserted}, "
+            f"total actualizados: {total_modified}"
+        )
 
 if __name__ == "__main__":
     ingester = OpenDataBcnIngester()
