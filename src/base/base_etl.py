@@ -10,6 +10,7 @@ from utils.logger import get_logger
 # TYPE HINT
 # def transform(self, df: pl.DataFrame) -> pl.DataFrame:
 #                            ↑ entra            ↑ sale
+from utils.config import MONGO_URI, MONGO_DB_NAME
 
 
 class BaseETL(ABC):
@@ -20,11 +21,10 @@ class BaseETL(ABC):
         """Constructor de clase, es el metodo qeu se ejecuta automáticamente
         cuando se llama una clase que hereda este ETL base
            - self es la referencia al propio objeto"""
-        self.client = MongoClient(mongo_uri)
-        self.db = self.client[db_name]
-        self.logger = get_logger(
-            self.__class__.__name__
-        )  # Crea un logger específico para cada clase que herede de BaseETL,
+        self.client = MongoClient(MONGO_URI)
+        self.db = self.client[MONGO_DB_NAME]
+        self.logger = get_logger(self.__class__.__name__)
+        # Crea un logger específico para cada clase que herede de BaseETL,
         # usando el nombre de la clase como nombre del logger
 
     @abstractmethod  # decoder que obliga a clases hijas a implementarlo

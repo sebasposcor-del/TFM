@@ -166,14 +166,14 @@ class OpenDataBcnIngester(BaseETL):
                 )
 
 
-            # Envía las 10,000 operaciones a MongoDB en un solo viaje
+            # 0,000 operaciones a MongoDB de una
             result = self.clean_collection.bulk_write(operations)
 
             # Acumula estadísticas
             total_inserted += result.upserted_count
             total_modified += result.modified_count
 
-    # Resumen final
+    # Resumen 
         self.logger.info(
             f"Upsert completado — "
             f"total insertados: {total_inserted}, "
