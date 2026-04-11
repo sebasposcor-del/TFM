@@ -1,7 +1,7 @@
-#Testeas que tu código transforma correctamente los datos
-#1. El transform produce las columnas correctas
-#2. El transform produce los tipos de datos correctos
-#3. El transform produce los valores correctos (si es posible)
+# Testeas que tu código transforma correctamente los datos
+# 1. El transform produce las columnas correctas
+# 2. El transform produce los tipos de datos correctos
+# 3. El transform produce los valores correctos (si es posible)
 
 import polars as pl
 import pytest
@@ -10,19 +10,26 @@ import pytest
 MODIS_SCALE_FACTOR = 0.02
 KELVIN_OFFSET = 273.15
 
+
 def apply_modis_transform(df: pl.DataFrame) -> pl.DataFrame:
     """Replica exacta del transform() de MODISIngester, sin MongoDB."""
-    df = df.with_columns(
-        [
-            ((pl.col("mean") * MODIS_SCALE_FACTOR) - KELVIN_OFFSET).round(2)
-            .alias("lst_celsius"),
-            pl.col("fecha").str.strptime(pl.Datetime, "%Y-%m-%d").alias("fecha"),
-            pl.col("COD_POSTAL").cast(pl.Utf8).str.zfill(5).alias("cod_postal"),
-        ]
-    ).drop(["mean", "COD_POSTAL"]).select(["cod_postal", "fecha", "lst_celsius"])
+    df = (
+        df.with_columns(
+            [
+                ((pl.col("mean") * MODIS_SCALE_FACTOR) - KELVIN_OFFSET)
+                .round(2)
+                .alias("lst_celsius"),
+                pl.col("fecha").str.strptime(pl.Datetime, "%Y-%m-%d").alias("fecha"),
+                pl.col("COD_POSTAL").cast(pl.Utf8).str.zfill(5).alias("cod_postal"),
+            ]
+        )
+        .drop(["mean", "COD_POSTAL"])
+        .select(["cod_postal", "fecha", "lst_celsius"])
+    )
     return df
 
-#Fixture — datos de prueba reutilizables en todos los tests
+
+# Fixture — datos de prueba reutilizables en todos los tests
 @pytest.fixture
 def sample_df() -> pl.DataFrame:
     """DataFrame con datos simulados que imitan el CSV de MODIS."""
@@ -37,11 +44,13 @@ def sample_df() -> pl.DataFrame:
         }
     )
 
-#Tests
+
+# Tests
 def test_output_columns(sample_df):
     """El transform debe producir exactamente estas 3 columnas."""
     result = apply_modis_transform(sample_df)
     assert result.columns == ["cod_postal", "fecha", "lst_celsius"]
+
 
 def test_scale_factor(sample_df):
     """Verifica que la conversión Kelvin a Celsius es correcta para un valor conocido.
