@@ -5,12 +5,11 @@ from abc import ABC, abstractmethod
 import polars as pl
 from pymongo import MongoClient
 
-from utils.logger import get_logger
-
 # TYPE HINT
 # def transform(self, df: pl.DataFrame) -> pl.DataFrame:
 #                            ↑ entra            ↑ sale
-from utils.config import MONGO_URI, MONGO_DB_NAME
+from utils.config import MONGO_DB_NAME, MONGO_URI
+from utils.logger import get_logger
 
 
 class BaseETL(ABC):

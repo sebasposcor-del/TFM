@@ -1,7 +1,8 @@
 import json
-import geopandas as gpd
-import zipfile
 import os
+import zipfile
+
+import geopandas as gpd
 
 with open("/home/app/src/data/BARCELONA.geojson", "r", encoding="utf-8") as f:
     data = json.load(f)
