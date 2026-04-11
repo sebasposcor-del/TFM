@@ -16,9 +16,7 @@ def apply_electricity_transform(df: pl.DataFrame) -> pl.DataFrame:
             (
                 pl.col("Data")
                 + pl.lit(" ")
-                + pl.col("Tram_Horari")
-                .cast(pl.String)
-                .str.extract(r"De (\d{2}:\d{2}:\d{2})")
+                + pl.col("Tram_Horari").cast(pl.String).str.extract(r"De (\d{2}:\d{2}:\d{2})")
             )
             .str.to_datetime("%Y-%m-%d %H:%M:%S")
             .alias("Datetime"),
@@ -82,6 +80,7 @@ def test_datetime_parsed(sample_df):
     result = apply_electricity_transform(sample_df)
     # 2025-01-01 + De 00:00:00 → 2025-01-01 00:00:00
     import datetime
+
     assert result["Datetime"][0].replace(tzinfo=None) == datetime.datetime(2025, 1, 1, 0, 0, 0)
 
 
