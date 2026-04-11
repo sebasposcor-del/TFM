@@ -1,0 +1,91 @@
+# =============================================================================
+# build_dataset.py
+# Dataset Builder — Une las fuentes limpias de MongoDB en un dataset final
+# =============================================================================
+#
+# STOP → UNDERSTAND → BREAK DOWN → SOLVE
+#
+# ------------------------------------------------------------------------------
+# UNDERSTAND
+# El objetivo es unir los datasets limpios de MongoDB, que tienen diferentes
+# granularidades, en un único DataFrame coherente listo para EDA y modelado.
+#
+# ------------------------------------------------------------------------------
+# BREAK DOWN
+# 1. Descargar cada colección limpia desde MongoDB
+# 2. Ajustar granularidades al nivel elegido (diario por código postal)
+# 3. Hacer los joins entre fuentes
+# 4. Guardar el dataset final en MongoDB y como Parquet para el EDA
+#
+# ------------------------------------------------------------------------------
+# 5 Ps
+# Personas  : yo — para EDA y modelado
+# Problema  : Unir fuentes con diferente granularidad en un dataset coherente
+# Datos     : clean_electricity, clean_meteocat, clean_modis_lst (MongoDB)
+# Plataforma: Python + Polars dentro del contenedor Docker
+# Plazo     : Entre hoy y mañana
+#
+# ------------------------------------------------------------------------------
+# SOLVE — Antes de escribir código
+#
+# Input:
+#   - 3 DataFrames de Polars leídos desde MongoDB
+#   - Granularidades distintas:
+#       · Electricidad : 6 horas por código postal
+#       · Meteocat     : 30 minutos por estación (→ hay que mapear a código postal)
+#       · MODIS LST    : diario por código postal
+#   - Granularidad objetivo: 6 horas
+#
+# Output:
+#   - 1 único DataFrame de Polars
+#   - Guardado en MongoDB (colección: dataset_final) y como Parquet
+#
+# Contrato (qué pasa con inputs inválidos):
+#   - Si una colección de MongoDB está vacía → lanzar ValueError con mensaje claro
+#   - Si el join produce 0 filas → lanzar ValueError (algo está mal en los datos)
+#
+# ------------------------------------------------------------------------------
+# ESTRUCTURA
+#
+# Clase DatasetBuilder con métodos separados por responsabilidad:
+#   load_electricity()    lee y agrega electricidad a nivel diario
+#   load_meteocat()       lee, pivota variables y agrega a nivel diario por CP
+#   load_modis()          lee MODIS (ya es diario por CP)
+#   build()               hace los joins entre las 3 fuentes
+#   save()                guarda en MongoDB y como Parquet
+#   run()                 orquesta todo en orden
+#
+# ¿Reutilizar BaseETL? NO — DatasetBuilder no es un ingester.
+#   BaseETL tiene extract/transform/load_raw/load_clean para ingerir datos externos.
+#   Aquí solo leemos de MongoDB y unimos. Clase propia más simple.
+#
+# Ubicación: src/features/build_dataset.py
+# Dataset final: MongoDB colección "dataset_final" + archivo data/dataset_final.parquet
+#
+# ------------------------------------------------------------------------------
+# EDGE CASES
+#
+# Input vacío    : Si MongoDB devuelve [] . ValueError antes de intentar el join
+# Nulos          : Se mantienen — se analizarán y tratarán en EDA
+# Duplicados     : No debe haberlos — la clave única es (fecha, cod_postal)
+# Volumen        : ~1.7M registros → Polars suficiente, no necesita Spark
+# Tipos          : Ya validados en los ingestores — se confía en clean collections
+#
+# ------------------------------------------------------------------------------
+# ERROR HANDLING
+#
+# Estrategia     : Fail fast — si algo falla, parar inmediatamente con mensaje claro
+# Logging        : Registrar nº de filas descargadas y subidas (deben coincidir)
+# Excepciones    : ValueError para colecciones vacías o joins vacíos
+#
+# ------------------------------------------------------------------------------
+# PRINCIPIOS
+#
+# KISS  : Polars para 1.7M rows — simple y suficiente, sin Spark
+# WET   : Primero hacer que funcione, luego refactorizar (DRY viene después)
+# YAGNI : No construir funcionalidad "por si acaso" — solo lo que se necesita ahora
+# SLAP  : Cada método hace UNA cosa — load no transforma, build no guarda
+# LoD   : Cada método solo habla con sus dependencias directas (MongoDB, Polars)
+#         No encadenar llamadas tipo obj.a.b.c.method()
+#
+# =============================================================================

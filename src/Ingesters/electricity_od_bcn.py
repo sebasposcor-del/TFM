@@ -25,8 +25,8 @@ class OpenDataBcnIngester(BaseETL):
         self.clean_collection = self.db["clean_electricity"]
         # Index para uniqueness
         self.clean_collection.create_index(
-            [("Datetime", 1), ("Codi_Postal", 1), ("Sector_Economic", 1)], unique=True
-        )
+            [("datetime", 1), ("cod_postal", 1), ("sector_economic", 1)], unique=True
+            )
 
     def extract(self) -> pl.DataFrame:
         """Descarga los csvs de Open Data BCN, los une y devuelve un DataFrame raw"""
@@ -115,6 +115,12 @@ class OpenDataBcnIngester(BaseETL):
             )
             .drop("Any", "Data", "Tram_Horari", "Valor")
             .select("Datetime", "Codi_Postal", "Sector_Economic", "MWh")
+            .rename({
+                "Datetime": "datetime",
+                "Codi_Postal": "cod_postal",
+                "Sector_Economic": "sector_economic",
+                "MWh": "mwh"
+            })
         )
 
         print(raw_od_bcn.head())
@@ -152,9 +158,9 @@ class OpenDataBcnIngester(BaseETL):
                     UpdateOne(  # Busca UN documento que coincida con  filtro. Si  encuentras, actualízalo. Si no, créalo.
                         # 1er argumento: FILTRO — "busca un doc con esta clave compuesta"
                         {
-                            "Datetime": rec["Datetime"],
-                            "Codi_Postal": rec["Codi_Postal"],
-                            "Sector_Economic": rec["Sector_Economic"],
+                            "datetime": rec["datetime"],
+                            "cod_postal": rec["cod_postal"],
+                            "sector_economic": rec["sector_economic"],
                         },
                         # 2do argumento: ACCIÓN — "reemplaza estos campos con los valores nuevos"
                         {"$set": rec},

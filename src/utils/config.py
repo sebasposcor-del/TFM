@@ -18,7 +18,7 @@ METEOCAT_BASE_URL = "https://analisi.transparenciacatalunya.cat/resource/nzvn-ap
 
 METEOCAT_STATIONS = ["D5", "X2", "X4", "X8", "AN"]
 
-METEOCAT_VARIABLES = ["30", "32", "33", "34", "35", "36"]
+METEOCAT_VARIABLES = ["30", "32", "33", "35", "36"]
 
 METEOCAT_YEARS = list(range(2019, 2026))
 

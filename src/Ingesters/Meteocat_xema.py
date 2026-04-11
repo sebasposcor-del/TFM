@@ -26,9 +26,9 @@ class MeteocatIngester(BaseETL):
         self.clean_col = self.db["clean_meteocat"]
 
         self.clean_col.create_index(
-            [("codi_estacio", 1), ("codi_variable", 1), ("data_lectura", 1)],
+            [("codi_estacio", 1), ("data_lectura", 1)],
             unique=True,
-        )
+            )
 
     def extract(self) -> pl.DataFrame:
         """Descarga registros paginando por estación, año y mes."""
@@ -110,8 +110,24 @@ class MeteocatIngester(BaseETL):
             .drop(["id", "codi_base", "codi_estat"])
         )
 
-        self.logger.info(f"Transform: {dfpl.shape[0]:,} registros válidos")
-        return dfpl
+        df_wide = (
+            dfpl.filter(pl.col("codi_variable").is_in([int(v) for v in METEOCAT_VARIABLES]))
+            .pivot(
+                values="valor_lectura",
+                index=["codi_estacio", "data_lectura"],
+                on="codi_variable",
+            )
+            .rename({
+                "30": "viento",
+                "32": "temp",
+                "33": "humedad",
+                "35": "precipitacion",
+                "36": "irradiancia"
+                })
+            )
+
+        self.logger.info(f"Transform: {df_wide.shape[0]:,} registros válidos")
+        return df_wide
 
     def load_clean(self, df: pl.DataFrame) -> None:
         """Upsert por clave compuesta (estació + variable + fecha) en batches de 10k."""
@@ -128,7 +144,6 @@ class MeteocatIngester(BaseETL):
                     UpdateOne(
                         filter={
                             "codi_estacio": rec["codi_estacio"],
-                            "codi_variable": rec["codi_variable"],
                             "data_lectura": rec["data_lectura"],
                         },
                         update={"$set": rec},
