@@ -1,18 +1,19 @@
 """Pipeline ETL para datos meteorológicos de Meteocat (XEMA) via Transparència Catalunya."""
 
-import requests
 import time
+
 import polars as pl
+import requests
 from pymongo import UpdateOne
 
 from base.base_etl import BaseETL
 from utils.config import (
+    BATCH_SIZE,
     METEOCAT_BASE_URL,
     METEOCAT_STATIONS,
     METEOCAT_VARIABLES,
     METEOCAT_YEARS,
     PAGE_SIZE,
-    BATCH_SIZE,
 )
 
 
@@ -28,8 +29,6 @@ class MeteocatIngester(BaseETL):
             [("codi_estacio", 1), ("codi_variable", 1), ("data_lectura", 1)],
             unique=True,
         )
-    
-
 
     def extract(self) -> pl.DataFrame:
         """Descarga registros paginando por estación, año y mes."""
@@ -73,13 +72,13 @@ class MeteocatIngester(BaseETL):
 
                         if not batch:
                             break
-                        
+
                         all_records.extend(batch)
                         self.logger.info(f"  offset={offset} → {len(batch)} registros")
 
                         if len(batch) < PAGE_SIZE:
                             break
-                        
+
                         offset += PAGE_SIZE
 
         self.logger.info(f"Total extraídos: {len(all_records):,}")
@@ -100,12 +99,13 @@ class MeteocatIngester(BaseETL):
         dfpl = pl.DataFrame(records)
 
         dfpl = (
-            dfpl
-            .with_columns([
-                pl.col("data_lectura").str.to_datetime("%Y-%m-%dT%H:%M:%S%.f"),
-                pl.col("valor_lectura").cast(pl.Float64),
-                pl.col("codi_variable").cast(pl.Int32),
-            ])
+            dfpl.with_columns(
+                [
+                    pl.col("data_lectura").str.to_datetime("%Y-%m-%dT%H:%M:%S%.f"),
+                    pl.col("valor_lectura").cast(pl.Float64),
+                    pl.col("codi_variable").cast(pl.Int32),
+                ]
+            )
             .filter(pl.col("codi_estat") == "V")
             .drop(["id", "codi_base", "codi_estat"])
         )

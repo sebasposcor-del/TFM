@@ -4,8 +4,8 @@ import io
 import time
 
 import polars as pl
-from pymongo import UpdateOne
 import requests
+from pymongo import UpdateOne
 
 from base.base_etl import BaseETL
 
@@ -23,11 +23,10 @@ class OpenDataBcnIngester(BaseETL):
 
         self.raw_collection = self.db["raw_electricity"]
         self.clean_collection = self.db["clean_electricity"]
-        #Index para uniqueness
+        # Index para uniqueness
         self.clean_collection.create_index(
-            [("Datetime", 1), ("Codi_Postal", 1), ("Sector_Economic", 1)]
-            , unique=True
-            ) 
+            [("Datetime", 1), ("Codi_Postal", 1), ("Sector_Economic", 1)], unique=True
+        )
 
     def extract(self) -> pl.DataFrame:
         """Descarga los csvs de Open Data BCN, los une y devuelve un DataFrame raw"""
@@ -124,7 +123,6 @@ class OpenDataBcnIngester(BaseETL):
 
     def load_clean(self, df: pl.DataFrame) -> None:
 
-
         self.logger.info("Guardando datos limpios en MongoDB (upsert)...")
 
         # Convierte el DataFrame de Polars a una lista de diccionarios
@@ -142,7 +140,7 @@ class OpenDataBcnIngester(BaseETL):
         # Con 1.17M registros, 117 batches
         # i toma valores: 0, 10000, 20000, 30000...
         for i in range(0, len(records), batch_size):
-        
+
             # Corta la lista desde i hasta i+10000
             # Ejemplo: batch 1 = records[0:10000], batch 2 = records[10000:20000], etc.
             batch = records[i : i + batch_size]
@@ -151,8 +149,8 @@ class OpenDataBcnIngester(BaseETL):
             operations = []
             for rec in batch:
                 operations.append(
-                    UpdateOne( #Busca UN documento que coincida con  filtro. Si  encuentras, actualízalo. Si no, créalo.
-                    # 1er argumento: FILTRO — "busca un doc con esta clave compuesta"
+                    UpdateOne(  # Busca UN documento que coincida con  filtro. Si  encuentras, actualízalo. Si no, créalo.
+                        # 1er argumento: FILTRO — "busca un doc con esta clave compuesta"
                         {
                             "Datetime": rec["Datetime"],
                             "Codi_Postal": rec["Codi_Postal"],
@@ -162,9 +160,8 @@ class OpenDataBcnIngester(BaseETL):
                         {"$set": rec},
                         # 3er argumento: si no lo encuentra, créalo
                         upsert=True,
+                    )
                 )
-                )
-
 
             # 0,000 operaciones a MongoDB de una
             result = self.clean_collection.bulk_write(operations)
@@ -173,12 +170,13 @@ class OpenDataBcnIngester(BaseETL):
             total_inserted += result.upserted_count
             total_modified += result.modified_count
 
-    # Resumen 
+        # Resumen
         self.logger.info(
             f"Upsert completado — "
             f"total insertados: {total_inserted}, "
             f"total actualizados: {total_modified}"
         )
+
 
 if __name__ == "__main__":
     ingester = OpenDataBcnIngester()
