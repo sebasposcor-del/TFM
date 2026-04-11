@@ -20,7 +20,7 @@ class BaseETL(ABC):
         """Constructor de clase, es el metodo qeu se ejecuta automáticamente
         cuando se llama una clase que hereda este ETL base
            - self es la referencia al propio objeto"""
-        self.client = MongoClient(MONGO_URI)
+        self.client: MongoClient = MongoClient(MONGO_URI)
         self.db = self.client[MONGO_DB_NAME]
         self.logger = get_logger(self.__class__.__name__)
         # Crea un logger específico para cada clase que herede de BaseETL,
