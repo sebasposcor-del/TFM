@@ -74,7 +74,7 @@ class MeteocatIngester(BaseETL):
                             break
 
                         all_records.extend(batch)
-                        self.logger.info(f"  offset={offset} → {len(batch)} registros")
+                        self.logger.info(f"  offset={offset} : {len(batch)} registros")
 
                         if len(batch) < PAGE_SIZE:
                             break
@@ -106,8 +106,9 @@ class MeteocatIngester(BaseETL):
                     pl.col("codi_variable").cast(pl.Int32),
                 ]
             )
-            .filter(pl.col("codi_estat") == "V")
-            .drop(["id", "codi_base", "codi_estat"])
+            .filter(pl.col("codi_estat").eq("V") | pl.col("codi_estat").is_null())
+            .drop(["id", "codi_base"])
+            .pipe(lambda df: df.drop("codi_estat") if "codi_estat" in df.columns else df)
         )
 
         df_wide = (
@@ -116,6 +117,7 @@ class MeteocatIngester(BaseETL):
                 values="valor_lectura",
                 index=["codi_estacio", "data_lectura"],
                 on="codi_variable",
+                aggregate_function="mean"  # añade esto
             )
             .rename({
                 "30": "viento",
@@ -123,8 +125,8 @@ class MeteocatIngester(BaseETL):
                 "33": "humedad",
                 "35": "precipitacion",
                 "36": "irradiancia"
-                })
-            )
+            })
+        )
 
         self.logger.info(f"Transform: {df_wide.shape[0]:,} registros válidos")
         return df_wide
@@ -164,3 +166,8 @@ class MeteocatIngester(BaseETL):
 if __name__ == "__main__":
     ingester = MeteocatIngester()
     ingester.run()
+
+#if __name__ == "__main__":
+#    ingester = MeteocatIngester()
+#    df_clean = ingester.transform(pl.DataFrame())
+#    ingester.load_clean(df_clean)
