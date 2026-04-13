@@ -28,7 +28,7 @@ class MeteocatIngester(BaseETL):
         self.clean_col.create_index(
             [("codi_estacio", 1), ("data_lectura", 1)],
             unique=True,
-            )
+        )
 
     def extract(self) -> pl.DataFrame:
         """Descarga registros paginando por estación, año y mes."""
@@ -117,15 +117,17 @@ class MeteocatIngester(BaseETL):
                 values="valor_lectura",
                 index=["codi_estacio", "data_lectura"],
                 on="codi_variable",
-                aggregate_function="mean"  # añade esto
+                aggregate_function="mean",  # añade esto
             )
-            .rename({
-                "30": "viento",
-                "32": "temp",
-                "33": "humedad",
-                "35": "precipitacion",
-                "36": "irradiancia"
-            })
+            .rename(
+                {
+                    "30": "viento",
+                    "32": "temp",
+                    "33": "humedad",
+                    "35": "precipitacion",
+                    "36": "irradiancia",
+                }
+            )
         )
 
         self.logger.info(f"Transform: {df_wide.shape[0]:,} registros válidos")
@@ -167,7 +169,7 @@ if __name__ == "__main__":
     ingester = MeteocatIngester()
     ingester.run()
 
-#if __name__ == "__main__":
+# if __name__ == "__main__":
 #    ingester = MeteocatIngester()
 #    df_clean = ingester.transform(pl.DataFrame())
 #    ingester.load_clean(df_clean)
