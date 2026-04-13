@@ -112,12 +112,12 @@ class DatasetBuilder(BaseETL):
         result: pl.DataFrame = pl.DataFrame(
             [
                 {
-                "cod_postal": f["properties"]["COD_POSTAL"],
-                "codi_estacio": estacion_mas_cercana(*centroide(f["geometry"]["coordinates"])),
+                    "cod_postal": f["properties"]["COD_POSTAL"],
+                    "codi_estacio": estacion_mas_cercana(*centroide(f["geometry"]["coordinates"])),
                 }
                 for f in geojson["features"]
             ]
-            )
+        )
 
         return result.unique("cod_postal")
 
