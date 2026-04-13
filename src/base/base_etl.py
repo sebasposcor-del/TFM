@@ -31,7 +31,7 @@ class BaseETL(ABC):
         """Método que descarga data de fuente,devuelve un dataFrame raw,"""
 
     @abstractmethod
-    def transform(self, df: pl.DataFrame) -> pl.DataFrame:
+    def transform(self) -> pl.DataFrame:
         """Método que limpia y transforma el dataFrame raw, devuelve un dataFrame limpio"""
 
     @abstractmethod
@@ -52,7 +52,7 @@ class BaseETL(ABC):
         raw_pl = self.extract()
         self.load_raw(raw_pl)
 
-        clean_pl = self.transform(raw_pl)
+        clean_pl = self.transform()
         self.load_clean(clean_pl)
 
         self.client.close()

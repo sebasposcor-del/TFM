@@ -82,7 +82,7 @@ class OpenDataBcnIngester(BaseETL):
         self.raw_collection.insert_many(df.to_dicts())  # Convierte el DataFrame a una
         self.logger.info("Datos raw guardados con éxito en MongoDB")
 
-    def transform(self, df: pl.DataFrame) -> pl.DataFrame:
+    def transform(self) -> pl.DataFrame:
         self.logger.info("Leyendo datos raw de MongosDB...")
         raw_od_bcn_lst = list(
             self.raw_collection.find({}, {"_id": 0})

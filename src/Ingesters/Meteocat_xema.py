@@ -90,7 +90,7 @@ class MeteocatIngester(BaseETL):
         self.raw_col.insert_many(df.to_dicts())
         self.logger.info(f"Raw cargado: {df.shape[0]:,} registros")
 
-    def transform(self, df: pl.DataFrame) -> pl.DataFrame:
+    def transform(self) -> pl.DataFrame:
         """Lee de raw MongoDB, limpia y tipifica. Devuelve DataFrame limpio."""
         self.logger.info("Leyendo datos raw de MongoDB...")
         records = list(self.raw_col.find({}, {"_id": 0}))

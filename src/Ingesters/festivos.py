@@ -33,8 +33,11 @@ class FestivosIngester(BaseETL):
         self.raw_col.insert_many(df.to_dicts())
         self.logger.info(f"Raw cargado: {df.shape[0]} registros")
 
-    def transform(self, df: pl.DataFrame) -> pl.DataFrame:
+    def transform(self) -> pl.DataFrame:
         """Filtra festivos de BCN, limpia columnas y añade La Mercè."""
+        records = list(self.raw_col.find({}, {"_id": 0}))
+        df = pl.DataFrame(records)  # ← aquí nace df
+
         df_limpio = (
             df.filter(pl.col("global") | pl.col("counties").list.contains("ES-CT"))
             .select("date", "localName", "name")
