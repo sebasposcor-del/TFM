@@ -26,7 +26,7 @@ class OpenDataBcnIngester(BaseETL):
         # Index para uniqueness
         self.clean_collection.create_index(
             [("datetime", 1), ("cod_postal", 1), ("sector_economic", 1)], unique=True
-            )
+        )
 
     def extract(self) -> pl.DataFrame:
         """Descarga los csvs de Open Data BCN, los une y devuelve un DataFrame raw"""
@@ -115,12 +115,14 @@ class OpenDataBcnIngester(BaseETL):
             )
             .drop("Any", "Data", "Tram_Horari", "Valor")
             .select("Datetime", "Codi_Postal", "Sector_Economic", "MWh")
-            .rename({
-                "Datetime": "datetime",
-                "Codi_Postal": "cod_postal",
-                "Sector_Economic": "sector_economic",
-                "MWh": "mwh"
-            })
+            .rename(
+                {
+                    "Datetime": "datetime",
+                    "Codi_Postal": "cod_postal",
+                    "Sector_Economic": "sector_economic",
+                    "MWh": "mwh",
+                }
+            )
         )
 
         print(raw_od_bcn.head())

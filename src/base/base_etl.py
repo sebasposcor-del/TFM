@@ -16,7 +16,7 @@ class BaseETL(ABC):
     """Clase base para procesos ETL,
     define la estructura y métodos comunes para los ingesters"""
 
-    def __init__(self, mongo_uri: str = "mongodb://mongo:27017/", db_name: str = "tfm_energy"):
+    def __init__(self):
         """Constructor de clase, es el metodo qeu se ejecuta automáticamente
         cuando se llama una clase que hereda este ETL base
            - self es la referencia al propio objeto"""
