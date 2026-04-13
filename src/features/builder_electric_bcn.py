@@ -108,7 +108,7 @@ class DatasetBuilder(BaseETL):
                 + (self.ESTACIONES[e][1] - lat) ** 2,
             )
 
-        return pl.DataFrame(
+        result: pl.DataFrame = pl.DataFrame(
             [
                 {
                     "cod_postal": f["properties"]["COD_POSTAL"],
@@ -117,6 +117,8 @@ class DatasetBuilder(BaseETL):
                 for f in geojson["features"]
             ]
         ).unique("cod_postal")
+
+        return result
 
     def _build_dataset(self, electricity, modis, festivos, meteocat) -> pl.DataFrame:
         df_mapeo = self._build_mapeo_estaciones()
