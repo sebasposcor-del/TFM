@@ -1,4 +1,5 @@
 import json
+from unittest import result
 
 import polars as pl
 import polars.selectors as cs
@@ -111,14 +112,14 @@ class DatasetBuilder(BaseETL):
         result: pl.DataFrame = pl.DataFrame(
             [
                 {
-                    "cod_postal": f["properties"]["COD_POSTAL"],
-                    "codi_estacio": estacion_mas_cercana(*centroide(f["geometry"]["coordinates"])),
+                "cod_postal": f["properties"]["COD_POSTAL"],
+                "codi_estacio": estacion_mas_cercana(*centroide(f["geometry"]["coordinates"])),
                 }
                 for f in geojson["features"]
             ]
-        ).unique("cod_postal")
+            )
 
-        return result
+        return result.unique("cod_postal")
 
     def _build_dataset(self, electricity, modis, festivos, meteocat) -> pl.DataFrame:
         df_mapeo = self._build_mapeo_estaciones()
