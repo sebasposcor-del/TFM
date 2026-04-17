@@ -1,5 +1,4 @@
 import json
-from unittest import result
 
 import polars as pl
 import polars.selectors as cs
@@ -11,10 +10,56 @@ from base.base_etl import BaseETL
 class DatasetBuilder(BaseETL):
 
     ESTACIONES = {
-        "D5": (2.1228, 41.3833),
-        "X2": (2.1686, 41.3874),
-        "X4": (2.1528, 41.4035),
-        "X8": (2.1971, 41.4034),
+        "D5": {"coords": (2.1228, 41.4177), "nombre": "Barcelona - Observatori Fabra"},
+        "X2": {"coords": (2.1898, 41.3842), "nombre": "Barcelona - Zoo"},
+        "X4": {"coords": (2.1656, 41.3793), "nombre": "Barcelona - el Raval"},
+        "X8": {"coords": (2.1133, 41.3876), "nombre": "Barcelona - Zona Universitària"},
+        "AN": {"coords": (2.1859, 41.3907), "nombre": "Barcelona - Parc de la Ciutadella"},
+    }
+
+    NOMBRES_POSTALES = {
+        "08001": "Las Ramblas / El Raval",
+        "08002": "Barri Gòtic",
+        "08003": "La Barceloneta",
+        "08004": "Montjuïc / Poble Sec",
+        "08005": "El Poblenou",
+        "08006": "Sarrià - Sant Gervasi",
+        "08007": "Dreta de l'Eixample / Pg. de Gràcia",
+        "08008": "Dreta de l'Eixample",
+        "08009": "Dreta de l'Eixample",
+        "08010": "Pl. Catalunya / Gran Via",
+        "08011": "Sant Antoni",
+        "08012": "Vila de Gràcia",
+        "08013": "La Sagrada Família",
+        "08014": "Sants - Montjuïc",
+        "08015": "Esquerra de l'Eixample",
+        "08016": "Nou Barris",
+        "08017": "Sarrià - Sant Gervasi",
+        "08018": "Fort Pienc",
+        "08019": "El Besòs i el Maresme",
+        "08020": "La Verneda",
+        "08021": "Sant Gervasi - Galvany",
+        "08022": "Les Tres Torres / Bonanova",
+        "08023": "Vallcarca i els Penitents",
+        "08024": "Gràcia Nova",
+        "08025": "El Guinardó",
+        "08026": "El Clot / Camp de l'Arpa",
+        "08027": "La Sagrera",
+        "08028": "Zona Universitària / Les Corts",
+        "08029": "Nova Esquerra de l'Eixample",
+        "08030": "El Bon Pastor / Sant Andreu",
+        "08031": "Vilapicina / Torre Llobeta",
+        "08032": "El Carmel / El Guinardó",
+        "08033": "Vallbona / Ciutat Meridiana",
+        "08034": "Pedralbes / Sarrià",
+        "08035": "Sant Genís dels Agudells / Vall d'Hebron",
+        "08036": "L'Antiga Esquerra de l'Eixample",
+        "08037": "Vila de Gràcia",
+        "08038": "Montjuïc / Zona Franca",
+        "08039": "El Port / La Barceloneta",
+        "08040": "La Zona Franca",
+        "08041": "Sant Andreu",
+        "08042": "Torre Baró / Nou Barris",
     }
 
     def __init__(self):
@@ -29,10 +74,10 @@ class DatasetBuilder(BaseETL):
         self.datos_festivos = pl.DataFrame(list(self.db["clean_festivos"].find({}, {"_id": 0})))
 
     def transform(self) -> pl.DataFrame:
-        modis = self._transform_modis_lst(self.datos_modis_lst)
+        modis       = self._transform_modis_lst(self.datos_modis_lst)
         electricity = self._transform_electricity(self.datos_electricity)
-        festivos = self._transform_festivos(self.datos_festivos)
-        meteocat = self._transform_meteocat(self.datos_meteocat)
+        festivos    = self._transform_festivos(self.datos_festivos)
+        meteocat    = self._transform_meteocat(self.datos_meteocat)
 
         return self._build_dataset(electricity, modis, festivos, meteocat)
 
@@ -46,9 +91,9 @@ class DatasetBuilder(BaseETL):
             )
             .rename(
                 {
-                    "Indústria": "mwh_industria",
-                    "Residencial": "mwh_residencial",
-                    "Serveis": "mwh_servicios",
+                    "Indústria":      "mwh_industria",
+                    "Residencial":    "mwh_residencial",
+                    "Serveis":        "mwh_servicios",
                     "No especificat": "mwh_no_especificado",
                 }
             )
@@ -105,19 +150,25 @@ class DatasetBuilder(BaseETL):
         def estacion_mas_cercana(lon, lat):
             return min(
                 self.ESTACIONES,
-                key=lambda e: (self.ESTACIONES[e][0] - lon) ** 2
-                + (self.ESTACIONES[e][1] - lat) ** 2,
+                key=lambda e: (self.ESTACIONES[e]["coords"][0] - lon) ** 2
+                            + (self.ESTACIONES[e]["coords"][1] - lat) ** 2,
             )
 
-        result: pl.DataFrame = pl.DataFrame(
-            [
-                {
-                    "cod_postal": f["properties"]["COD_POSTAL"],
-                    "codi_estacio": estacion_mas_cercana(*centroide(f["geometry"]["coordinates"])),
-                }
-                for f in geojson["features"]
-            ]
-        )
+        result = pl.DataFrame([
+            {
+                "cod_postal":      f["properties"]["COD_POSTAL"],
+                "nombre_postal":   self.NOMBRES_POSTALES.get(
+                                       f["properties"]["COD_POSTAL"], "Desconocido"
+                                   ),
+                "centroide_lon":   (c := centroide(f["geometry"]["coordinates"]))[0],
+                "centroide_lat":   c[1],
+                "codi_estacio":    (est := estacion_mas_cercana(*c)),
+                "nombre_estacio":  self.ESTACIONES[est]["nombre"],
+                "estacio_lon":     self.ESTACIONES[est]["coords"][0],
+                "estacio_lat":     self.ESTACIONES[est]["coords"][1],
+            }
+            for f in geojson["features"]
+        ])
 
         return result.unique("cod_postal")
 
@@ -131,7 +182,6 @@ class DatasetBuilder(BaseETL):
             .drop("fecha_join")
             .join(df_mapeo, how="left", on="cod_postal")
             .join(meteocat, how="left", on=["codi_estacio", "datetime"])
-            .drop("codi_estacio")
             .with_columns(
                 [
                     pl.col("nombre_local").is_not_null().cast(pl.Int8).alias("es_festivo"),
@@ -143,6 +193,38 @@ class DatasetBuilder(BaseETL):
                     (pl.col("datetime").dt.weekday() >= 5).cast(pl.Int8).alias("es_finde"),
                 ]
             )
+            .select([
+                "cod_postal",
+                "nombre_postal",
+                "centroide_lon",
+                "centroide_lat",
+                "codi_estacio",
+                "nombre_estacio",
+                "estacio_lon",
+                "estacio_lat",
+                "datetime",
+                "mwh_total",
+                "mwh_industria",
+                "mwh_residencial",
+                "mwh_servicios",
+                "mwh_no_especificado",
+                "lst_celsius",
+                "temp_mean",
+                "temp_max",
+                "temp_min",
+                "humedad_mean",
+                "viento_mean",
+                "precipitacion_sum",
+                "irradiancia_mean",
+                "es_festivo",
+                "nombre_local",
+                "hora",
+                "dia_semana",
+                "mes",
+                "anio",
+                "semana_anio",
+                "es_finde",
+            ])
         )
 
         return dataset
