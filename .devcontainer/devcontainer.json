@@ -3,7 +3,7 @@
     "dockerComposeFile": "../docker-compose.yml",
     "service": "app",
     "runServices": ["app", "mongo", "mongo-express"],
-    "workspaceFolder": "/home/app/src",
+    "workspaceFolder": "/home/app",
     "customizations": {
         "vscode": {
             "extensions": [

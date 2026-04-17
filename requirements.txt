@@ -7,6 +7,14 @@ pymongo==4.10.1
 requests==2.32.3
 types-requests==2.32.0.20241016
 
+# ---------- EDA y visualización -------------   ← bloque nuevo
+jupyter==1.1.0
+matplotlib==3.10.1
+seaborn==0.13.2
+numpy==2.2.5
+scipy==1.15.3
+scikit-learn==1.6.1
+
 # ---------- Calidad de código (CI) ----------
 black==24.10.0
 isort==5.13.2

@@ -1,6 +1,7 @@
 version: '3.8'
 
 services:
+
   app:
     build:
       context: .
@@ -9,11 +10,20 @@ services:
     environment:
       - PYTHONPATH=/home/app/src
     volumes:
-      - ./src:/home/app/src
-      - ./pyproject.toml:/home/app/pyproject.toml
+      - .:/home/app
+    ports:
+      - "8888:8888"
     networks:
       - tfm-network
     tty: true
+    command: >
+      jupyter notebook
+      --ip=0.0.0.0
+      --port=8888
+      --no-browser
+      --NotebookApp.token=''
+      --allow-root
+      --notebook-dir=/home/app/notebooks
 
   mongo:
     image: mongo:7.0
