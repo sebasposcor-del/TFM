@@ -42,3 +42,9 @@ platformdirs==4.9.4
 tomlkit==0.14.0
 typing_extensions==4.15.0
 urllib3==2.6.3
+
+# ---------- EDA y visualización -------------
+jupyter==1.1.0
+ipykernel==6.29.5
+matplotlib==3.10.1
+statsmodels==0.14.4
