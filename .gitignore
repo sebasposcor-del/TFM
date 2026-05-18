@@ -51,3 +51,8 @@ desktop.ini
 spark-warehouse/
 metastore_db/
 derby.log
+
+# ---------- Jupyter notebook outputs --------
+notebooks/*_files/
+notebooks/*.html
+notebooks/*.md
