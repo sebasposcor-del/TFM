@@ -3,9 +3,10 @@ version: '3.8'
 services:
 
   app:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: tfm-app:latest
+    #build:
+     # context: .
+      #dockerfile: Dockerfile
     container_name: tfm-app
     environment:
       - PYTHONPATH=/home/app/src
