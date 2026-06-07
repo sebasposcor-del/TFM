@@ -190,7 +190,7 @@ class DatasetBuilder(BaseETL):
                     pl.col("datetime").dt.month().alias("mes"),
                     pl.col("datetime").dt.year().alias("anio"),
                     pl.col("datetime").dt.week().alias("semana_anio"),
-                    (pl.col("datetime").dt.weekday() >= 5).cast(pl.Int8).alias("es_finde"),
+                    (pl.col("datetime").dt.weekday() >= 6).cast(pl.Int8).alias("es_finde"),
                 ]
             )
             .select([
