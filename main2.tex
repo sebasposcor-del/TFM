@@ -613,7 +613,7 @@ Sobre las variables de calendario ya construidas por el pipeline ETL (hora, día
 
 \subsubsection{Variables meteorológicas y temperatura superficial (MODIS LST)}
 
-Para capturar la relación no lineal entre temperatura y consumo se construyen los grados-día de calefacción y refrigeración~\cite{kuru2019}: $\text{HDD}=\max(0,\,15-\text{temp})$ y $\text{CDD}=\max(0,\,\text{temp}-22)$, que descomponen la forma de U en dos rampas lineales aprovechables por los modelos. La falta de cobertura MODIS se convierte en señal informativa mediante el indicador \texttt{lst\_nublado}, y la precipitación se binariza en \texttt{precipitacion\_llueve}, dado que el EDA mostró que la información útil reside en si llueve o no, y no en la cantidad. La imputación meteorológica resuelve los nulos estructurales heredados: la temperatura y la humedad de la estación X2 en 2024--2025 se imputan desde la estación X4 aplicando un factor de corrección mensual basado en el cociente histórico X2/X4 (2019--2023); el viento y la irradiancia se toman directamente de X4; los nulos esporádicos de otras estaciones se completan con el mismo respaldo; y los valores negativos de irradiancia, físicamente imposibles, se truncan a cero. La temperatura superficial MODIS se conserva como predictor de la heterogeneidad térmica intraurbana~\cite{salvati2017}.
+Para capturar la relación no lineal entre temperatura y consumo se construyen los grados-día de calefacción y refrigeración~\cite{kuru2019}: $\text{HDD}=\max(0,\,15-\text{temp})$ y $\text{CDD}=\max(0,\,\text{temp}-22)$, que descomponen la forma de U en dos rampas lineales aprovechables por los modelos. El método grados-día está respaldado por Kuru y Çalış~\cite{kuru2019}, si bien su estudio se circunscribe a Francia y modela únicamente el HDD, propio de un clima templado; los umbrales empleados aquí se ajustan al estándar europeo de Eurostat~\cite{eurostat_chdd}, que fija el umbral de activación de HDD en 15$^\circ$C, y a la evidencia para el clima mediterráneo español~\cite{cienciastecnologia2012}, donde la refrigeración (CDD) adquiere un peso creciente que justifica su inclusión explícita frente al enfoque solo-calefacción del estudio original. El umbral de 22$^\circ$C para el CDD se apoya además en Giannakopoulos y Psiloglou~\cite{giannakopoulos2006}, que identificaron 22$^\circ$C como la temperatura ambiente de mínimo consumo energético en Atenas, ciudad de clima mediterráneo equivalente al de Barcelona. La falta de cobertura MODIS se convierte en señal informativa mediante el indicador \texttt{lst\_nublado}, y la precipitación se binariza en \texttt{precipitacion\_llueve}, dado que el EDA mostró que la información útil reside en si llueve o no, y no en la cantidad. La imputación meteorológica resuelve los nulos estructurales heredados: la temperatura y la humedad de la estación X2 en 2024--2025 se imputan desde la estación X4 aplicando un factor de corrección mensual basado en el cociente histórico X2/X4 (2019--2023); el viento y la irradiancia se toman directamente de X4; los nulos esporádicos de otras estaciones se completan con el mismo respaldo; y los valores negativos de irradiancia, físicamente imposibles, se truncan a cero. La temperatura superficial MODIS se conserva como predictor de la heterogeneidad térmica intraurbana~\cite{salvati2017}.
 
 \subsubsection{Variables de interacción: \texttt{hora\_x\_finde}, \texttt{is\_covid}}
 
@@ -795,6 +795,18 @@ Kuru, M. \& Calis, G. Forecasting Heating Degree Days for Energy Demand Modeling
 \bibitem{gassar2024}
 Gassar, A.A.A. Short-Term Energy Forecasting to Improve the Estimation of Demand Response Baselines in Residential Neighborhoods: Deep Learning vs. Machine Learning. \textit{Buildings}, 14(7), 2242, 2024.
 \url{https://doi.org/10.3390/buildings14072242}
+
+\bibitem{eurostat_chdd}
+Eurostat. \textit{Cooling and heating degree days statistics (nrg\_chdd) --- Reference Metadata}. European Commission, 2024.
+\url{https://ec.europa.eu/eurostat/cache/metadata/en/nrg_chdd_esms.htm}
+
+\bibitem{cienciastecnologia2012}
+Ortiz-Beviá, M.J., Sánchez-López, G., Alvarez-García, F.J. \& Ruiz de Elvira, A. Evolution of heating and cooling degree-days in Spain: Trends and interannual variability. \textit{Global and Planetary Change}, 92--93, 236--247, 2012.
+\url{https://doi.org/10.1016/j.gloplacha.2012.05.023}
+
+\bibitem{giannakopoulos2006}
+Giannakopoulos, C. \& Psiloglou, B.E. Trends in energy load demand for Athens, Greece: weather and non-weather related factors. \textit{Climate Research}, 31, 97--108, 2006.
+\url{https://doi.org/10.3354/cr031097}
 
 \end{thebibliography}
 
