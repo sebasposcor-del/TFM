@@ -1,8 +1,0 @@
-largo serie 6 anios: 8768
-A) 6 anios, actual            : 206.4s
-B) 6 anios, concentrate_scale : 204.5s
-C) 6 anios, simple_diff       :  54.3s
-largo 2 anios: 2924
-D) 2 anios, actual            :  84.8s
-E) 2 anios, simple+concentrate:  19.9s
-DONE
