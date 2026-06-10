@@ -12,12 +12,23 @@ matplotlib==3.10.1
 seaborn==0.13.2
 plotly==5.24.0
 numpy==2.2.5
+pandas          # usada directamente en notebooks (antes solo transitiva)
 scipy==1.15.3
 scikit-learn==1.6.1
 statsmodels==0.14.4
 # ---------- Modelado ------------------------
 statsforecast
 arch
+# ---------- Modelado ML (notebook 06) -------
+# Sin pin a propósito: pip resuelve versiones compatibles con el stack
+# (numpy 2.2.5 / scikit-learn 1.6.1) en el build. Congelar con `pip freeze`
+# tras el primer build correcto y fijar las versiones aquí.
+skforecast
+lightgbm
+xgboost
+shap
+optuna          # requerido por bayesian_search_forecaster
+joblib          # persistencia de modelos (ya usada en notebooks)
 # ---------- Calidad de código (CI) ----------
 black==24.10.0
 isort==5.13.2
