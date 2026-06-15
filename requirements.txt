@@ -29,6 +29,10 @@ xgboost
 shap
 optuna          # requerido por bayesian_search_forecaster
 joblib          # persistencia de modelos (ya usada en notebooks)
+# ---------- Modelado DL (notebook 08) -------
+# Backend de Keras 3 para ForecasterRnn (LSTM/GRU). Version CPU: el contenedor no expone GPU.
+# Pin a 2.21.0: verificado compatible con numpy 2.2.5 (no lo degrada en la instalacion).
+tensorflow-cpu==2.21.0
 # ---------- Calidad de código (CI) ----------
 black==24.10.0
 isort==5.13.2
