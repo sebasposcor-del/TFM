@@ -1,0 +1,746 @@
+# Sistema de Predicción Energética y Alerta Temprana en Barrios de Barcelona
+
+**Sebastián Posada Corrales** — Máster en Data Science, La Salle (Universitat Ramon Llull), Barcelona. Junio 2026.
+
+## Resumen
+
+El crecimiento urbano sostenido y la adopción masiva de nuevas tecnologías elevan de forma continua la demanda eléctrica en las ciudades. Este incremento viene acompañado de picos de consumo que pueden comprometer la estabilidad de la red de distribución, con consecuencias que van desde apagones localizados hasta situaciones de vulnerabilidad para colectivos sensibles como personas mayores o pacientes en centros médicos. La heterogeneidad de los barrios, en términos de densidad de población, tejido económico y características del parque residencial, hace que estos riesgos se distribuyan de forma desigual en el territorio.
+
+Para anticipar estas situaciones, se propone un sistema capaz de predecir episodios de estrés energético con entre 24 y 72 horas de antelación, a escala de barrio en la ciudad de Barcelona. El sistema integra fuentes de datos abiertos: el historial de consumo eléctrico por código postal del Ayuntamiento de Barcelona, los registros meteorológicos de la red de estaciones XEMA de Meteocat y los datos satelitales de temperatura superficial terrestre obtenidos a través del producto MODIS LST. La cadena completa de ingesta y transformación se implementa con Polars en un entorno Dockerizado, con MongoDB como base de datos central.
+
+La estrategia de modelado es progresiva: se parte de métodos estadísticos clásicos (SARIMA, SARIMAX) como línea base interpretable, se incorporan después modelos de machine learning basados en árboles (XGBoost, LightGBM) y, finalmente, se exploran arquitecturas de aprendizaje profundo (LSTM, GRU). Los modelos se evalúan no solo mediante métricas de error estándar (MAE, RMSE, MAPE), sino también a través de indicadores orientados a la utilidad operativa: tasa de detección de picos críticos y tasa de falsas alarmas. Ese equilibrio determina, en última instancia, si un operador humano puede confiar en el sistema para tomar decisiones preventivas.
+
+El proyecto está construido íntegramente sobre datos abiertos y herramientas de código libre, lo que lo hace reproducible y extensible a otras ciudades. Su contribución principal es demostrar que es posible pasar de datos históricos dispersos a un sistema operativo de alerta temprana con orientación municipal, complementario a las herramientas que ya emplean las operadoras eléctricas.
+
+## Abstract
+
+Sustained urban growth and the widespread adoption of new technologies continuously drive up electricity demand in cities. This increase is accompanied by consumption peaks that can compromise the stability of the distribution network, with consequences ranging from localized outages to vulnerability situations for sensitive groups such as the elderly or patients in medical facilities. The heterogeneity of neighborhoods in terms of population density, economic fabric, and residential building stock, means that these risks are distributed unevenly across the territory.
+
+To anticipate these situations, this work proposes a system capable of predicting energy stress episodes between 24 and 72 hours in advance, at neighborhood scale across the city of Barcelona. The system integrates open data sources: the electricity consumption history by postal code from the Barcelona City Council, meteorological records from the Meteocat XEMA station network, and satellite-derived land surface temperature data obtained through the MODIS LST product. The complete ingestion and transformation pipeline is implemented using Polars in a Dockerized environment, with MongoDB as the central database.
+
+The modeling strategy is progressive: it begins with classical statistical methods (SARIMA, SARIMAX) as an interpretable baseline, then incorporates tree-based machine learning models (XGBoost, LightGBM), and finally explores deep learning architectures (LSTM, GRU). Models are evaluated not only through standard error metrics (MAE, RMSE, MAPE), but also through operationally oriented indicators: critical peak detection rate and false alarm rate. This balance ultimately determines whether a human operator can rely on the system to make preventive decisions.
+
+The project is built entirely on open data and open-source tools, making it reproducible and extensible to other cities. Its main contribution is to demonstrate that it is possible to move from scattered historical data to an operational early warning system with a municipal focus, complementary to the tools already used by electricity network operators.
+
+## 1. Introducción
+
+### 1.1 Contexto general: redes eléctricas urbanas y Data Science
+
+La demanda eléctrica mundial atraviesa uno de sus períodos de crecimiento más intensos en décadas. El consumo global de electricidad ha aumentado un 4,3% en 2024, esto es más del promedio del 2,7% registrado entre 2010 y 2023, impulsado principalmente por la electrificación progresiva de los sectores industrial y residencial, las olas de calor extremas y la expansión acelerada de los centros de datos [iea2025]. El informe del Energy Institute de 2025 confirma esta tendencia, situando el crecimiento anual del consumo eléctrico global en torno al 4%, con variaciones regionales determinadas por factores económicos, sociales y climáticos [eldakhakhni2026].
+
+En entornos urbanos, esta presión sobre la red se manifiesta de forma notable. Las ciudades concentran densidades de consumo elevadas y heterogéneas, donde el sector residencial, comercial e industrial coexiste con comportamientos de demanda muy distintos. El consumo generado dentro de edificios (hogares, climatización, oficinas, hoteles, etc.) fue el principal motor del crecimiento en 2024, representando cerca del 60% del incremento total del consumo, impulsado por un mayor uso de climatización ante temperaturas extremas [iea2025]. Esta dependencia climática introduce una variabilidad no lineal difícil de anticipar con métodos convencionales, especialmente a escala de barrio, donde las diferencias microclimáticas entre zonas de una misma ciudad pueden ser significativas.
+
+Frente a esta complejidad, los enfoques clásicos de previsión de demanda resultan insuficientes. Los modelos univariantes asumen patrones de demanda estables y los multivariantes convencionales están limitados por conjuntos de variables restringidos, con escasa capacidad para capturar las interacciones cruzadas entre factores económicos, sociales y climáticos [eldakhakhni2026]. La irrupción del machine learning y deep learning ha abierto una nueva vía: sistemas capaces de integrar fuentes de datos heterogéneas, detectar patrones no lineales y generar predicciones interpretables mediante técnicas como SHAP, que permiten cuantificar la contribución de cada variable al resultado del modelo [eldakhakhni2026].
+
+Este cambio de paradigma sitúa la ciencia de datos en el centro de la gestión energética urbana, no como un complemento analítico, sino como una herramienta real para anticipar situaciones de estrés en la red con suficiente antelación para que los operadores humanos puedan actuar.
+
+### 1.2 Contexto específico: Barcelona como caso de estudio
+
+Barcelona reúne las condiciones necesarias para aplicar técnicas de ciencia de datos a la gestión energética urbana. Investigaciones recientes sitúan a Barcelona entre las smart cities más avanzadas del continente en términos de competencias orientadas a los datos, destacando la accesibilidad de su información mediante plataformas abiertas, dashboards municipales y laboratorios de innovación que la distinguen de otras ciudades europeas. Esta madurez se refleja en el portal Open Data BCN, que pone a disposición pública más de 450 conjuntos de datos en formatos reutilizables que abarcan desde movilidad y medio ambiente hasta economía y consumo energético [krogstie2020].
+
+En términos energéticos, la ciudad consume aproximadamente 6.199 GWh anuales de electricidad, de los cuales apenas el 1,2% proviene de fuentes renovables, lo que sitúa la eficiencia y la gestión de la demanda como prioridades estratégicas del gobierno municipal [ajuntament2022]. Este volumen, distribuido entre más de 1,6 millones de habitantes, no se reparte de forma uniforme en el territorio, y sus consecuencias tampoco.
+
+Se entiende por pobreza energética la situación en la que un hogar no puede permitirse mantener una temperatura adecuada ni hacer frente al coste de sus facturas de suministro. No se trata únicamente de un problema económico: tiene consecuencias directas sobre la salud, especialmente en personas mayores, menores y pacientes con condiciones crónicas. Marí-Dell'Olmo et al. documentaron estas desigualdades en los 73 barrios de Barcelona, identificando tres clusters con tasas de pobreza energética por encima de la media: el norte (Nou Barris, Ciutat Meridiana, Baró de Viver y Vallbona), el centro histórico (Ciutat Vella, El Raval) y la zona sur (Sants-Montjuïc) [maridelolmo2022]. Esta distribución desigual pone de manifiesto que Barcelona no puede tratarse como un sistema energético homogéneo: cada barrio tiene un perfil de consumo propio, moldeado por su composición socioeconómica, su parque edificatorio y sus condiciones microclimáticas. Anticipar episodios de estrés energético requiere, por tanto, operar a una escala suficientemente fina como para capturar estas diferencias, lo que motiva el enfoque a nivel de código postal adoptado en este trabajo.
+
+En cuanto a la temperatura, Salvati et al. [salvati2017] documentaron variaciones intraurbanas de hasta 4,3°C entre barrios de Barcelona mediante datos de la red de estaciones Meteocat, evidenciando cómo el efecto de isla de calor urbano se manifiesta de forma desigual en el territorio y amplifica las diferencias de consumo entre zonas de la ciudad, especialmente durante episodios de calor extremo.
+
+La combinación de estos factores, heterogeneidad estructural del consumo, vulnerabilidad diferenciada por barrio y variabilidad climática intraurbana, hace de Barcelona un caso de estudio idóneo para un sistema de predicción energética a esta escala.
+
+### 1.3 Descripción del problema y motivación
+
+La red de distribución eléctrica de Barcelona opera bajo una presión creciente que combina tres factores simultáneos: el aumento sostenido de la demanda, la mayor frecuencia de episodios climáticos extremos y una infraestructura diseñada para escenarios de consumo que ya no reflejan la realidad de la ciudad. El cambio climático ha provocado un incremento en la frecuencia de eventos meteorológicos extremos que estresan la red y las variaciones bruscas de la carga son cada vez más comunes [moreno2022]. Estos episodios no se distribuyen de forma uniforme en el tiempo ni en el territorio, sino que se concentran en determinados barrios, en franjas horarias específicas y durante períodos de calor o frío extremo, precisamente cuando la capacidad de respuesta del sistema es más limitada.
+
+Endesa acordó con el Ayuntamiento de Barcelona un plan de inversión de 46 millones de euros anuales para renovar y digitalizar la red en los diez distritos de la ciudad, incluyendo la sensorización del 74% de los centros de transformación antes de finales de 2023 [endesa2021]. Esta inversión refuerza la infraestructura física, pero no resuelve el problema de anticipación. Conocer con suficiente antelación dónde y cuándo se producirán los próximos picos de demanda permite a los operadores actuar de forma preventiva y optimizar la distribución de carga antes de que el sistema entre en situación crítica.
+
+El principal obstáculo histórico para desarrollar sistemas predictivos a escala de barrio no ha sido la capacidad técnica, sino el acceso a los datos. Los sistemas de predicción de demanda eléctrica existen y son ampliamente utilizados por operadoras y consultoras energéticas, pero operan sobre datos propietarios que no están disponibles para la gestión municipal ni para la investigación pública [jiang2024]. Este trabajo explora si es posible construir un sistema de precisión comparable utilizando exclusivamente fuentes de datos abiertos, con el objetivo de que la metodología resultante pueda servir como referencia replicable para municipios, operadoras o consultoras que busquen alternativas más accesibles y transparentes a los modelos propietarios actuales.
+
+### 1.4 Objetivos
+
+#### 1.4.1 Objetivo general
+
+Desarrollar un sistema de predicción de demanda eléctrica y alerta temprana a escala de código postal en la ciudad de Barcelona, con un horizonte de anticipación de entre 24 y 72 horas, utilizando exclusivamente fuentes de datos abiertos y herramientas de código libre, con el fin de que la metodología resultante pueda servir como referencia replicable para municipios, operadoras o consultoras energéticas.
+
+#### 1.4.2 Objetivos específicos
+
+- Construir un pipeline de ingesta, transformación y almacenamiento de datos abiertos (consumo eléctrico por código postal, meteorología Meteocat y temperatura superficial MODIS LST) sobre una arquitectura reproducible basada en Docker, Polars y MongoDB.
+- Realizar un análisis exploratorio exhaustivo del consumo eléctrico en Barcelona a escala de código postal, identificando patrones temporales, estacionales y geoespaciales relevantes para el modelado.
+- Diseñar e implementar una estrategia de feature engineering que integre variables de calendario, meteorológicas, satelitales e interacciones específicas del dominio urbano.
+- Desarrollar y comparar una progresión de modelos de predicción, desde métodos estadísticos clásicos (SARIMA) hasta machine learning (XGBoost, LightGBM) y deep learning (LSTM, GRU), evaluados mediante métricas de error estándar y métricas operativas de detección de picos.
+- Implementar un sistema de alerta temprana con un dashboard por barrio que permita a operadores humanos anticipar episodios de estrés energético con suficiente margen para actuar de forma preventiva.
+
+### 1.5 Alcance y limitaciones
+
+**Alcance**
+
+El alcance es principalmente predictivo, ya que su función es anticipar episodios de estrés energético y emitir alertas para que los usuarios puedan tomar decisiones. El sistema no realiza ningún tipo de control automático sobre la red de distribución ni actúa sobre la demanda en tiempo real.
+
+El ámbito geográfico se enfoca en la ciudad de Barcelona, con resolución espacial de código postal. La ventana temporal del dataset abarca el período de 2019 a 2025, con datos de consumo eléctrico en bloques de seis horas. El horizonte de predicción objetivo es de entre 24 y 72 horas. Además, todas las fuentes de datos utilizadas son de acceso público y gratuito, y todo el stack tecnológico está basado en herramientas de código libre.
+
+La estrategia de modelado es progresiva e incluye tres familias de modelos:
+- Métodos estadísticos clásicos (SARIMA/SARIMAX) como baseline interpretable.
+- Modelos de machine learning basados en árboles (XGBoost, LightGBM).
+- Arquitecturas de deep learning (LSTM, GRU).
+
+**Limitaciones**
+
+Las limitaciones identificadas se agrupan en tres ámbitos: ingesta y pipeline, calidad de datos, y alcance del modelado.
+
+*Ingesta y pipeline.* Los CSVs de consumo eléctrico de Open Data BCN cambian de resource ID entre años, lo que impide una descarga completamente automatizada y requiere un mapeo manual de identificadores para el período 2019–2025. La API de Meteocat presenta limitaciones de paginación y rate limiting, lo que obligó a implementar lógica de reintentos y descarga por bloques temporales. La extracción de MODIS LST a través de Google Earth Engine requiere autenticación con credenciales de proyecto activas, lo que condiciona la reproducibilidad completa del pipeline sin configuración previa.
+
+*Integración y calidad de datos.* Las tres fuentes presentan granularidades temporales distintas: Open Data BCN contiene el consumo en bloques de 6 horas, Meteocat tiene intervalos de 30 minutos y MODIS LST tiene una observación diaria. Por esto, se realizó una normalización de granularidad antes de construir el dataset final. Adicionalmente, MODIS LST presenta gaps por cobertura de nubes que generan nulos no imputables en determinadas fechas. La ausencia de un identificador geográfico común entre fuentes obligó a construir una tabla de asignación postal a estación y una lógica de extracción por centroide de polígono. La estación meteorológica X2 de Meteocat estuvo inactiva en 2025 y con cobertura parcial en 2024, dejando nulos permanentes en viento e irradiancia para los códigos postales asignados a dicha estación. Adicionalmente, la auditoría de calidad del dato reveló que la fuente de consumo eléctrico reasigna consumo entre códigos postales a lo largo del tiempo: doce códigos presentan quiebres artificiales de nivel en 2024–2025 (verificados contra los datos crudos de la fuente, por lo que no son atribuibles al pipeline) y se excluyen del estudio de modelado, que se realiza sobre los 30 códigos postales con series íntegras (sección III.F).
+
+*Alcance del modelado.* El producto satelital MOD11A1 (satélite Terra, sobrevuelo aproximado a las 10:30h) es subóptimo para capturar el pico del efecto isla de calor urbano respecto al satélite MYD11A1 (Aqua, sobrevuelo a las 13:30h), que se propone como mejora en las líneas futuras. El modelo no incorpora indicadores de pobreza energética ni de autorrestricción del consumo, cuya estimación a escala de código postal requeriría fuentes no disponibles de forma abierta. Las arquitecturas Temporal Fusion Transformer (TFT) y Graph Neural Networks (GNN) quedan fuera del alcance por restricciones de tiempo y se proponen como extensiones en el capítulo de líneas futuras.
+
+### 1.6 Estructura del documento
+
+El presente trabajo se organiza en siete capítulos. Tras esta introducción, el capítulo II revisa el estado del arte y los fundamentos teóricos: desde los modelos clásicos de series temporales hasta las arquitecturas de deep learning más recientes, cerrando con las métricas de evaluación empleadas tanto para la precisión de la predicción como para la calidad del sistema de alerta. El capítulo III cubre la dimensión técnica y metodológica del proyecto: las fuentes de datos utilizadas, la arquitectura del pipeline ETL, el análisis exploratorio realizado y el diseño experimental sobre el que se construyen los modelos. El capítulo IV detalla el desarrollo de los modelos, siguiendo una progresión deliberada de complejidad creciente: desde el baseline estadístico (SARIMA/SARIMAX) hasta las arquitecturas de aprendizaje profundo (LSTM/GRU), pasando por los modelos de gradient boosting con análisis de importancia de variables. El capítulo V presenta los resultados comparativos por métrica y horizonte de predicción, la evaluación de la capacidad de detección de picos y la selección del modelo final. El capítulo VI describe el diseño del dashboard por barrio y el sistema de alerta temprana. Finalmente, el capítulo VII cierra el trabajo con las conclusiones, el estudio económico, las consideraciones éticas y sociales, y las líneas futuras de investigación.
+
+## 2. Estado del Arte y Fundamentos Teóricos
+
+### 2.1 Previsión de demanda eléctrica: panorama general
+
+La previsión de demanda eléctrica es una de las áreas de investigación más activas dentro de la gestión de sistemas de potencia. Su relevancia radica en que una predicción correcta de consumo permite a los operadores optimizar la generación, reducir costes de operación y prevenir situaciones de desequilibrio entre oferta y demanda. Las metodologías de previsión se clasifican habitualmente en tres grandes familias: modelos estadísticos, modelos de machine learning e inteligencia artificial, y modelos híbridos. Se aplican en tres horizontes temporales distintos: a corto plazo (horas o días), a medio plazo (semanas o meses) y a largo plazo (años), cada uno con requisitos de precisión y disponibilidad de datos diferentes [ugbehe2025].
+
+El corto plazo es el horizonte más crítico para la operación de la red y el que presenta mayor complejidad técnica. Una revisión sistemática de más de 300 artículos publicados entre 2012 y 2022 sobre previsión de carga a corto plazo en el sector residencial evidencia una diversidad considerable de técnicas y algoritmos, así como la ausencia de datasets y métricas de referencia comunes que permitan comparar resultados entre estudios de forma directa [melicio2023]. Esta fragmentación metodológica dificulta establecer qué enfoque es más adecuado en cada contexto y subraya la necesidad de evaluaciones comparativas sistemáticas como la que se plantea en este trabajo.
+
+En cuanto a la evolución de los métodos, los modelos estadísticos clásicos como ARIMA y sus variantes han dominado la literatura hasta la primera década del siglo XXI. Aunque los modelos de ML e IA se aplican hoy de forma más extendida, los modelos híbridos han ganado preferencia en la investigación reciente por su mayor precisión al combinar las fortalezas de distintas aproximaciones [ugbehe2025]. Sin embargo, esta complejidad creciente tiene un coste en interpretabilidad y despliegue operativo. Este trabajo adopta una estrategia comparativa progresiva: se ejecutarán métodos estadísticos hasta deep learning sin recurrir a arquitecturas híbridas, con el objetivo de mantener la trazabilidad metodológica y la reproducibilidad del sistema.
+
+Un aspecto menos explorado en la literatura es la aplicación de estas técnicas a escala de barrio con datos de acceso público. La mayoría de estudios operan sobre datos de medidores inteligentes de acceso privado o sobre series nacionales y regionales, dejando un hueco metodológico relevante en el contexto de la gestión energética municipal [jiang2024]. Este trabajo se sitúa precisamente en ese espacio de predicción de demanda a corto plazo, a resolución de código postal, sobre fuentes de datos abiertos.
+
+### 2.2 Series temporales: fundamentos teóricos
+
+Una serie temporal es una secuencia de observaciones registradas en instantes sucesivos y ordenados en el tiempo [hyndman2021]. A diferencia de los datos tabulares convencionales, el orden de las observaciones es relevante: el valor en el instante $t$ depende, en mayor o menor medida, de los valores pasados. Esta dependencia temporal es precisamente lo que los modelos intentan capturar y cuantificar.
+
+Cualquier serie temporal puede descomponerse en tres componentes fundamentales: la tendencia, que recoge la variación sostenida a largo plazo en el nivel de la serie; la estacionalidad, que representa patrones periódicos y repetibles asociados al calendario como los ciclos diario, semanal o anual; y el residuo, que agrupa la variación aleatoria no explicada por los dos anteriores [hyndman2021].
+
+La relación entre estos componentes determina el tipo de descomposición aplicable. En el modelo aditivo, la magnitud de la estacionalidad es constante independientemente del nivel de la serie. En el modelo multiplicativo, la amplitud de las oscilaciones estacionales crece proporcionalmente al nivel. En la práctica, la demanda eléctrica urbana tiende a mostrar un comportamiento multiplicativo: las diferencias de consumo entre verano e invierno son proporcionales al volumen total consumido en cada barrio, de modo que un barrio industrial experimenta variaciones estacionales absolutas mayores que uno residencial, aunque el patrón relativo sea similar.
+
+La descomposición STL (*Seasonal and Trend Decomposition using Loess*) permite extraer estos componentes de forma independiente y es especialmente adecuada para series con patrones estacionales no lineales o que varían en intensidad a lo largo del periodo, como las series de consumo eléctrico de este trabajo [hyndman2021].
+
+#### 2.2.1 Estacionariedad, tendencia y estacionalidad
+
+Una serie temporal es estacionaria cuando su media, varianza y estructura de autocorrelación permanecen constantes a lo largo del tiempo. La estacionariedad es un requisito fundamental para los modelos clásicos de previsión, ya que permite asumir que el comportamiento pasado es representativo del futuro [hyndman2021]. Las series de demanda eléctrica raramente cumplen esta condición debido a que presentan tendencia a largo plazo, estacionalidades múltiples como diaria, semanal y anual, y perturbaciones estructurales como la caída de consumo asociada al COVID-19 en 2020.
+
+Para verificar la estacionariedad de forma rigurosa, este trabajo aplica conjuntamente dos tests estadísticos con hipótesis complementarias.
+
+El **test ADF** (*Augmented Dickey-Fuller*) contrasta la presencia de raíz unitaria. Su hipótesis nula es que la serie no es estacionaria, y el estadístico se obtiene estimando:
+
+donde se contrasta $H_0: \gamma = 0$. Un p-valor inferior a 0,05 permite rechazar la hipótesis nula y concluir estacionariedad [hyndman2021].
+
+El **test KPSS** (*Kwiatkowski-Phillips-Schmidt-Shin*) opera con la hipótesis contraria: su hipótesis nula es que la serie es estacionaria. El estadístico se construye sobre las sumas parciales de residuos $S_t = \sum_{i=1}^{t} \hat{e}_i$:
+
+Un p-valor inferior a 0,05 lleva a rechazar la estacionariedad [hyndman2021].
+
+La aplicación conjunta de ambos tests proporciona una diagnosis más robusta que cualquiera de los dos por separado. Si ADF rechaza la raíz unitaria y KPSS no rechaza la estacionariedad, la serie puede considerarse estacionaria. En caso contrario, se aplican las diferenciaciones necesarias, cuyos órdenes $d$ y $D$ determinan la configuración del modelo SARIMA.
+
+#### 2.2.2 Autocorrelación y autocorrelación parcial (ACF/PACF)
+
+La función de autocorrelación (ACF) mide la correlación entre una serie y sus valores retardados en el retardo $k$:
+
+La función de autocorrelación parcial (PACF) mide esa misma relación aislando el efecto de los retardos intermedios, lo que permite identificar la correlación directa entre el instante $t$ y el retardo $k$, eliminando la influencia de los retardos $1, 2, …, k-1$ [hyndman2021].
+
+Esta distinción tiene una repercusión práctica directa. Los modelos ARIMA tienen dos parámetros de orden que hay que fijar antes de entrenar. El primero, $p$, controla cuántos valores pasados usa el modelo para predecir el valor actual (componente autorregresiva). El segundo, $q$, controla cuántos errores de predicción pasados se incorporan como corrección (componente de media móvil). La PACF revela el orden $p$ porque mide correlaciones directas: cuando cae bruscamente después del retardo $k$, indica que a partir de ahí los valores pasados no aportan información nueva. La ACF revela el orden $q$ por la misma lógica pero sobre la correlación total. En presencia de estacionalidad, estos mismos patrones aparecen repetidos en los retardos correspondientes al período estacional.
+
+En este trabajo, el análisis ACF/PACF sobre las series de consumo por código postal sirve de base para fijar el orden inicial del modelo SARIMA utilizado como baseline, antes de refinar los parámetros mediante tuning automático.
+
+### 2.3 Modelos clásicos de series temporales
+
+La literatura de previsión de demanda eléctrica distingue tres grandes familias de modelos según su naturaleza matemática y su forma de tratar la incertidumbre [eke2025]:
+
+- **Modelos deterministas:** expresan la demanda como función explícita de variables conocidas (temperatura, hora del día o calendario) sin componente aleatoria. Son transparentes e interpretables, pero asumen que el sistema puede describirse por completo con las variables observadas, lo que limita su capacidad ante perturbaciones no anticipadas.
+- **Modelos estocásticos:** incorporan explícitamente la incertidumbre modelando la serie como un proceso aleatorio con estructura temporal. La familia ARIMA/SARIMA es el ejemplo canónico: describe la demanda en función de sus propios valores pasados y de errores aleatorios, sin necesidad de especificar a priori las variables explicativas.
+- **Modelos avanzados de predicción:** engloba los enfoques de machine learning y deep learning que aprenden patrones complejos y no lineales directamente de los datos, sin imponer una forma funcional predefinida. Incluyen desde gradient boosting (XGBoost, LightGBM) hasta redes recurrentes (LSTM, GRU) y arquitecturas de atención (Transformer, TFT).
+
+La demanda eléctrica a nivel de barrio es una serie temporal estocástica marcada por autocorrelación, estacionalidades múltiples y perturbaciones aleatorias por eventos climáticos o sociales, que no puede ser capturada en su totalidad por un modelo puramente determinista. Este trabajo adopta, por lo tanto, una estrategia progresiva que comienza con modelos estocásticos clásicos como baseline, avanza hacia modelos avanzados de machine learning y deep learning, y finaliza con una comparativa sistemática entre familias.
+
+#### 2.3.1 SARIMA / SARIMAX
+
+Los modelos SARIMA (*Seasonal Autoregressive Integrated Moving Average*) extienden la familia ARIMA incorporando términos estacionales que capturan dependencias periódicas en la serie. Su notación SARIMA$(p, d, q)(P, D, Q)_s$ especifica dos niveles de parámetros: los no estacionales $(p, d, q)$ y los estacionales $(P, D, Q)$ para un período $s$ [hyndman2021, boxjenkins2015].
+
+El modelo completo se expresa mediante el operador de retardo $B$ ($B y_t = y_{t-1}$) como:
+
+donde $\phi_p(B) = 1 - \phi_1 B - \cdots - \phi_p B^p$ es el polinomio autorregresivo no estacional, $\Phi_P(B^s) = 1 - \Phi_1 B^s - \cdots - \Phi_P B^{Ps}$ es el polinomio autorregresivo estacional, $(1-B)^d$ aplica $d$ diferenciaciones para alcanzar la estacionariedad no estacional, $(1-B^s)^D$ aplica $D$ diferenciaciones estacionales, y $\theta_q(B)$, $\Theta_Q(B^s)$ son los polinomios de medias móviles correspondientes. El término $\varepsilon_t$ es ruido blanco con media cero y varianza constante $\sigma^2$ [hyndman2021].
+
+La identificación del orden óptimo $(p, d, q)(P, D, Q)$ sigue la metodología Box-Jenkins en tres etapas. Primero, se verifica la estacionariedad mediante los tests ADF y KPSS y se determina el orden de diferenciación $d$ y $D$ necesario. Segundo, se inspeccionan las funciones ACF y PACF de la serie diferenciada para obtener valores iniciales de $p$, $q$, $P$ y $Q$. Tercero, se estiman los parámetros por máxima verosimilitud y se validan los residuos verificando que se comporten como ruido blanco [hyndman2021, boxjenkins2015]. En este trabajo, la selección final del modelo se realiza mediante grid search sobre un espacio de configuraciones, guardando todos los resultados en CSV y seleccionando el modelo con mejor $R^2$ y menor diferencia relativa entre train y validación.
+
+En el contexto de este trabajo, los datos de consumo eléctrico tienen granularidad de 6 horas, lo que define los períodos estacionales relevantes: $s = 4$ para el ciclo diario (4 bloques de 6 horas forman un día), $s = 28$ para el ciclo semanal (28 bloques forman una semana) y $s = 1460$ para el ciclo anual. La coexistencia de estas tres estacionalidades hace del modelo SARIMA un baseline estadístico adecuado para capturar la estructura temporal del consumo antes de incorporar variables exógenas [hyndman2021].
+
+La variante SARIMAX extiende SARIMA añadiendo un vector de variables exógenas $\mathbf{x}_t$ con coeficientes $\boldsymbol{\beta}$:
+
+Esta extensión permite incorporar al modelo información externa como temperatura, festivos o indicadores de calendario, manteniendo el marco estadístico interpretable de SARIMA [hyndman2021]. En este trabajo, SARIMAX se emplea como segunda capa del baseline incorporando las variables meteorológicas de Meteocat y los indicadores de calendario, con el objetivo de cuantificar el incremento de $R^2$ atribuible a las variables exógenas frente al modelo univariante puro.
+
+SARIMA/SARIMAX se utiliza en este trabajo como modelo baseline por dos razones complementarias. Su interpretabilidad permite revisar directamente la estructura temporal capturada antes de avanzar hacia modelos de mayor complejidad, y su capacidad como predictor univariante establece el suelo de rendimiento: cualquier modelo posterior debe superar este baseline para justificar su complejidad adicional [hyndman2021, boxjenkins2015].
+
+### 2.4 Machine Learning aplicado a predicción de demanda
+
+#### 2.4.1 XGBoost / LightGBM
+
+Los modelos basados en gradient boosting construyen un ensemble de árboles de decisión de forma secuencial, donde cada árbol nuevo se entrena para corregir los errores residuales del conjunto anterior. A diferencia de los modelos estadísticos clásicos, no asumen ninguna forma funcional predefinida sobre la relación entre las variables de entrada y el objetivo, lo que les permite capturar interacciones no lineales complejas directamente de los datos [chen2016, ke2017].
+
+El principio del gradient boosting parte de un predictor inicial $F_0(\mathbf{x})$ y construye iterativamente el modelo final añadiendo en cada paso $m$ un árbol $h_m(\mathbf{x})$ que minimiza la función de pérdida $\mathcal{L}$:
+
+F_m(\mathbf{x}) = F_{m-1}(\mathbf{x}) + \eta \cdot h_m(\mathbf{x})
+
+donde $\eta \in (0,1]$ es la tasa de aprendizaje que controla la contribución de cada árbol. El árbol $h_m$ se ajusta sobre los residuos negativos del gradiente de la función de pérdida evaluada en el paso anterior:
+
+r_{im} = -\left[\frac{\partial \mathcal{L}(y_i, F(\mathbf{x}_i))}{\partial F(\mathbf{x}_i)}\right]_{F=F_{m-1}}
+
+Para problemas de regresión con pérdida cuadrática, estos residuos coinciden con los errores de predicción $r_{im} = y_i - F_{m-1}(\mathbf{x}_i)$, lo que conecta el algoritmo directamente con la minimización del MSE [chen2016].
+
+**XGBoost** extiende este marco incorporando regularización explícita en la función objetivo. La función a minimizar en cada paso $m$ incluye un término de regularización $\Omega(h_m)$ que penaliza la complejidad del árbol:
+
+donde:
+
+$T$ es el número de hojas del árbol, $w_j$ son los pesos de cada hoja, $\gamma$ penaliza el número de hojas (regularización L0) y $\lambda$ penaliza la magnitud de los pesos (regularización L2). Esta formulación reduce el sobreajuste y permite manejar valores nulos de forma nativa durante el entrenamiento [chen2016].
+
+**LightGBM** introduce dos optimizaciones que reducen significativamente el coste computacional sin sacrificar precisión. La primera es el muestreo de gradiente (*Gradient-based One-Side Sampling*, GOSS): en lugar de usar todas las observaciones para entrenar cada árbol, conserva las instancias con mayor gradiente (mayor error) y muestrea aleatoriamente las de gradiente pequeño, reduciendo el tamaño efectivo del dataset de entrenamiento. La segunda es el empaquetado de características exclusivas (*Exclusive Feature Bundling*, EFB): agrupa variables que raramente toman valores distintos de cero de forma simultánea, reduciendo el número de features efectivas. Combinadas, estas técnicas permiten tiempos de entrenamiento significativamente menores que XGBoost sobre datasets de tamaño medio-grande [ke2017].
+
+Una característica crítica de ambos modelos en series temporales es que no aprenden dependencias temporales de forma implícita. La estructura temporal debe codificarse explícitamente mediante variables de lag, medias móviles y variables de calendario. En este trabajo, las variables de entrada incluyen `lag_1`, `lag_4`, `lag_28`, `rolling_mean_7d`, HDD, CDD e `is_covid`, entre otras. Esta necesidad de ingeniería de variables explícita es precisamente lo que diferencia XGBoost y LightGBM de las arquitecturas recurrentes como LSTM y GRU, que aprenden las dependencias temporales directamente de los datos [jiang2024, chen2016, ke2017].
+
+En este trabajo, el gradient boosting constituye el segundo escalón de la estrategia progresiva, tras el baseline estadístico SARIMA/SARIMAX y antes de las arquitecturas de deep learning. El desarrollo se implementa con LightGBM (sección IV.B), seleccionado frente a XGBoost por su soporte nativo de variables categóricas (clave para codificar la identidad del código postal en un modelo global multi-serie) y por su eficiencia computacional [ke2017].
+
+### 2.5 Deep Learning para series temporales
+
+#### 2.5.1 LSTM y GRU
+
+Las redes neuronales recurrentes superaron las limitaciones de los modelos estadísticos clásicos al aprender dependencias temporales directamente de los datos, sin necesidad de especificar manualmente la estructura de la serie.
+
+**LSTM** (*Long Short-Term Memory*) fue la primera arquitectura en resolver el problema del gradiente evanescente, la tendencia de las redes recurrentes a olvidar información lejana durante el entrenamiento, mediante unidades de memoria especiales que mantienen un flujo de error estable a lo largo del tiempo [hochreiter1997]. Su arquitectura introduce dos vectores de estado: el estado de celda $\mathbf{c}_t$, que actúa como memoria a largo plazo, y el estado oculto $\mathbf{h}_t$, que actúa como salida a corto plazo. El flujo de información entre pasos temporales se regula mediante tres puertas:
+
+La **puerta de olvido** $\mathbf{f}_t$ decide qué información del estado de celda anterior descartar:
+
+La **puerta de entrada** $\mathbf{i}_t$ decide qué información nueva incorporar al estado de celda, junto con el vector candidato $\tilde{\mathbf{c}}_t$:
+
+El estado de celda se actualiza combinando ambas puertas:
+
+La **puerta de salida** $\mathbf{o}_t$ determina qué parte del estado de celda se propaga como estado oculto al siguiente paso:
+
+donde $\sigma$ es la función sigmoide, $\tanh$ es la tangente hiperbólica, $\odot$ denota el producto elemento a elemento, y $\mathbf{W}$, $\mathbf{U}$, $\mathbf{b}$ son las matrices de pesos y sesgos aprendidos durante el entrenamiento [hochreiter1997].
+
+**GRU** (*Gated Recurrent Unit*) simplifica este diseño fusionando las puertas de entrada y olvido en una única **puerta de actualización** $\mathbf{z}_t$ e introduciendo una **puerta de reset** $\mathbf{r}_t$, manteniendo un único vector de estado $\mathbf{h}_t$ [cho2014]:
+
+La puerta de actualización $\mathbf{z}_t$ controla cuánto del estado anterior se conserva y cuánto se reemplaza por la nueva información candidata $\tilde{\mathbf{h}}_t$. La puerta de reset $\mathbf{r}_t$ controla cuánta influencia tiene el estado anterior al calcular la nueva información candidata. Cuando $\mathbf{r}_t \approx 0$, la unidad ignora el estado anterior y actúa como si comenzara desde cero, lo cual es útil para capturar rupturas estructurales como el período COVID en los datos de consumo de este trabajo [cho2014].
+
+La reducción de parámetros respecto a LSTM, dos puertas en lugar de tres y sin estado de celda separado, se traduce en menores tiempos de entrenamiento sin sacrificar capacidad de modelado en la mayoría de problemas de forecasting. Gassar (2024) confirmó este equilibrio en un benchmark de demanda residencial, obteniendo un MAPE del 8,71% para GRU frente al 9,42% de LSTM y al 11,56% de XGBoost [gassar2024].
+
+En este trabajo, LSTM y GRU constituyen el tercer escalón de la estrategia progresiva de modelado. A diferencia de XGBoost y LightGBM, no requieren construcción explícita de lag features: la dependencia temporal queda codificada implícitamente en el estado oculto $\mathbf{h}_t$ que se propaga entre pasos. Esto los hace especialmente adecuados para capturar patrones de largo alcance en series de consumo eléctrico, donde las correlaciones identificadas en el EDA alcanzan retardos de hasta 28 bloques (7 días).
+
+#### 2.5.2 Temporal Fusion Transformer (TFT)
+
+El Temporal Fusion Transformer es una arquitectura basada en mecanismos de atención que combina predicción multi-horizonte de alto rendimiento con capacidades de interpretabilidad sobre la dinámica temporal [lim2021]. A diferencia de LSTM y GRU, TFT incorpora covariables estáticas, inputs futuros conocidos y series exógenas en un único marco arquitectónico, generando además intervalos de predicción por cuantiles que permiten cuantificar la incertidumbre de las estimaciones.
+
+Su inclusión en este estado del arte responde a su creciente adopción en la literatura de forecasting energético como referente de máximo rendimiento. Sin embargo, queda fuera del alcance de este trabajo por restricciones de tiempo y se propone como extensión natural en el capítulo de líneas futuras.
+
+### 2.6 Feature engineering en series temporales
+
+El feature engineering es el proceso de transformar los datos brutos en variables que permitan a los modelos de predicción capturar de forma explícita los patrones relevantes de la serie temporal. En el contexto de la demanda eléctrica, esta etapa es especialmente crítica para los modelos basados en árboles como XGBoost y LightGBM, que no aprenden dependencias temporales de forma implícita y dependen enteramente de la calidad de las variables de entrada [rubattu2023].
+
+Las técnicas más habituales se agrupan en tres categorías. Las variables de lag incorporan valores pasados de la serie como predictores del instante actual, codificando así la autocorrelación temporal: por ejemplo, el consumo de hace 6 horas (lag 1), de hace 24 horas (lag 4) o de hace 7 días (lag 28). Las agregaciones sobre ventana deslizante suavizan el ruido a corto plazo y capturan tendencias recientes, como la media móvil de los últimos 7 días (`rolling_mean_7d`). Finalmente, las variables de calendario, como la hora del día, el día de la semana, el mes o los festivos, codifican los patrones estacionales y el efecto de eventos especiales que los modelos no pueden inferir directamente de la serie [rubattu2023].
+
+Un aspecto crítico en el diseño de estas variables es evitar la fuga de datos o *data leakage*. Cualquier variable construida con información futura al instante de predicción invalida la evaluación del modelo y produce métricas artificialmente optimistas. En este trabajo, toda la ingeniería de variables respeta estrictamente el horizonte de predicción definido, utilizando únicamente información disponible en el momento en que se genera la predicción [rubattu2023].
+
+Adicionalmente, se incorporan variables de interacción específicas del dominio. La variable `hora_x_finde` captura el comportamiento diferencial del consumo en fin de semana según la franja horaria. La variable `is_covid` aísla el efecto estructural de la pandemia de 2020 sobre los patrones de demanda, evitando que el modelo interprete ese período como ruido aleatorio. Por último, se incluye la temperatura superficial terrestre derivada del producto MODIS LST como variable meteorológica satelital complementaria a los registros de las estaciones Meteocat, con el objetivo de capturar la variabilidad espacial del efecto isla de calor urbano entre barrios.
+
+### 2.7 Métricas de evaluación
+
+#### 2.7.1 MAE, RMSE, MAPE, WMAPE, R²
+
+La evaluación de modelos de predicción de demanda eléctrica requiere métricas que capturen distintas dimensiones del error. Sean $\hat{y}_i$ los valores predichos, $y_i$ los valores reales, $\bar{y}$ la media de los valores reales y $n$ el número de observaciones.
+
+**Error Absoluto Medio (MAE)**
+
+El Error Absoluto Medio mide la magnitud promedio de los errores de predicción en las mismas unidades que la variable objetivo, sin considerar su dirección:
+
+Cada error contribuye al promedio de forma proporcional a su magnitud absoluta, lo que confiere al MAE robustez ante valores atípicos: un error puntual muy grande no distorsiona la métrica de forma desproporcionada. Esta propiedad lo convierte en una medida de tendencia central del error, equivalente a la norma L1 en el espacio de errores. Su interpretación es directa: un MAE de 50 MWh indica que el modelo se desvía en promedio 50 MWh por bloque horario de 6 horas, lo que facilita la comunicación de resultados a audiencias no técnicas. Sin embargo, su insensibilidad a los errores grandes es también su principal limitación en contextos de alerta temprana, donde los fallos en episodios de pico tienen un coste operativo mayor que los errores en períodos de demanda normal [gassar2024, rubattu2023].
+
+**Raíz del Error Cuadrático Medio (RMSE)**
+
+La Raíz del Error Cuadrático Medio eleva al cuadrado cada error antes de promediarlos y extrae la raíz del resultado, devolviendo el valor a las unidades originales de la variable objetivo:
+
+La elevación al cuadrado amplifica la penalización de los errores grandes de forma cuadrática: un error de 100 MWh contribuye cuatro veces más que uno de 50 MWh, en lugar del doble que aportaría al MAE. Esta propiedad es matemáticamente equivalente a optimizar bajo la norma L2 y hace del RMSE la métrica más sensible a los episodios de pico fallidos, precisamente los eventos de mayor relevancia operativa en un sistema de alerta temprana. Cuando RMSE supera significativamente al MAE, indica la presencia de errores puntuales grandes que el MAE suaviza, señal de que el modelo falla sistemáticamente en determinados episodios de alta demanda [gassar2024, rubattu2023].
+
+**Error Porcentual Absoluto Medio (MAPE)**
+
+El Error Porcentual Absoluto Medio expresa el error como porcentaje del valor real, normalizando el error absoluto respecto a la escala de la variable objetivo:
+
+Esta normalización elimina la dependencia de escala, permitiendo comparar directamente el rendimiento del modelo entre códigos postales con volúmenes de consumo muy distintos: por ejemplo, entre un código postal industrial de alta demanda y uno residencial de baja demanda. Un MAPE del 10% tiene el mismo significado relativo independientemente del volumen absoluto de consumo. Su principal limitación es la inestabilidad numérica cuando los valores reales se aproximan a cero, ya que el denominador tiende a infinito y los errores porcentuales se disparan artificialmente. En el contexto de este trabajo, los bloques nocturnos de baja demanda pueden generar valores de MAPE elevados que no reflejan un fallo real del modelo sino un artefacto matemático de la métrica [gassar2024, rubattu2023].
+
+**Error Porcentual Absoluto Medio Ponderado (WMAPE)**
+
+El WMAPE corrige la inestabilidad del MAPE ante valores reales pequeños ponderando los errores absolutos por el volumen total de demanda real en lugar de dividir observación a observación:
+
+Al usar el total acumulado como denominador en lugar del valor individual de cada observación, los bloques de baja demanda reciben un peso proporcional a su contribución real al consumo total, evitando que distorsionen la métrica global. Esta propiedad lo hace especialmente adecuado para series con alta variabilidad temporal como el consumo eléctrico por barrio, donde la diferencia entre un bloque nocturno y uno de punta puede ser de un orden de magnitud. Matemáticamente, el WMAPE equivale al cociente entre el MAE agregado y la media de los valores reales, lo que lo convierte en una medida de error relativo globalmente estable [gassar2024, rubattu2023].
+
+**Coeficiente de determinación (R^2**)
+
+El coeficiente de determinación cuantifica la proporción de la varianza total de la demanda real que es explicada por el modelo, comparando el error del modelo con el error de un predictor trivial basado en la media histórica:
+
+R^2 = 1 - \frac{\sum_{i=1}^{n}(y_i - \hat{y}_i)^2}{\sum_{i=1}^{n}(y_i - \bar{y})^2}
+
+El numerador es la suma de errores cuadráticos del modelo (SSR) y el denominador es la varianza total de la serie (SST). Cuando el modelo predice perfectamente, SSR $= 0$ y $R^2 = 1$. Cuando el modelo no mejora la media histórica, SSR $=$ SST y $R^2 = 0$. Valores negativos indican que el modelo predice peor que la media, lo que en la práctica señala un fallo estructural del ajuste. A diferencia de las métricas de error, $R^2$ es adimensional y comparable directamente entre series de distinta escala y unidades, lo que lo convierte en la métrica de referencia para la comparación sistemática entre modelos y entre códigos postales. Por estas razones, $R^2$ constituye la métrica objetivo principal de este trabajo [gassar2024, rubattu2023].
+
+#### 2.7.2 Tasa de detección de picos y tasa de falsas alarmas
+
+Las métricas de error estándar evalúan la precisión promedio del modelo, pero no capturan su utilidad operativa real. Un sistema con MAPE bajo puede ser inútil si falla sistemáticamente en detectar los episodios de mayor demanda, que son precisamente los que generan situaciones críticas en la red. Para evaluar esta dimensión, se adopta un enfoque basado en detección de eventos: se define un umbral de pico $\tau$ en el percentil 90 de la distribución histórica de consumo por código postal, y se clasifica cada bloque horario mediante una etiqueta binaria:
+
+Esta formulación convierte el problema de regresión en uno de clasificación binaria sobre eventos críticos, lo que permite calcular una matriz de confusión con cuatro casos posibles: verdadero positivo (TP) cuando tanto el valor real como la predicción superan el umbral, falso negativo (FN) cuando el modelo no anticipa un pico que sí ocurre, falso positivo (FP) cuando el modelo alerta de un pico que no ocurre, y verdadero negativo (TN) cuando el modelo predice correctamente la ausencia de pico.
+
+A partir de esta clasificación se definen dos indicadores operativos complementarios. La **tasa de detección de picos** (TDP), equivalente al recall en clasificación binaria, mide la proporción de picos reales que el modelo anticipa correctamente:
+
+Un valor alto de TDP indica que el sistema genera pocas falsas tranquilidades: situaciones en las que el operador no recibe alerta y el pico ocurre igualmente. La **tasa de falsas alarmas** (TFA) mide la proporción de alertas emitidas que no corresponden a un pico real:
+
+Un valor bajo de TFA indica que el operador no recibe señales de ruido que erosionen su confianza en el sistema con el tiempo [maridelolmo2022, yasuhiro2020]. El equilibrio entre ambos indicadores determina, en última instancia, si un operador humano puede confiar en el sistema para tomar decisiones preventivas con suficiente antelación. En este trabajo, la selección del modelo final no se basa únicamente en $R^2$, sino en la combinación de alta TDP y baja TFA, criterio directamente alineado con la orientación operativa del sistema.
+
+### 2.8 Sistemas de alerta temprana y dashboards de apoyo a la decisión
+
+La predicción de demanda eléctrica adquiere su valor operativo real cuando se integra en un sistema capaz de traducir las estimaciones del modelo en señales accionables para los operadores de red. Un sistema de alerta temprana en este contexto no actúa de forma autónoma sobre la infraestructura, sino que funciona como interfaz entre el modelo predictivo y el juicio humano: emite alertas cuando la predicción supera umbrales críticos con suficiente antelación para que el operador pueda tomar medidas preventivas.
+
+La detección anticipada de picos de demanda es especialmente relevante para entidades que gestionan la distribución local de energía, ya que los costes de desequilibrio y los cargos por demanda máxima se concentran en un número reducido de horas al año. Wu et al. demostraron que un sistema de predicción de picos con horizonte de 24 horas permite a los operadores activar mecanismos de respuesta a la demanda o redistribución de carga antes de que se produzca el evento, reduciendo significativamente los costes asociados [wu2022]. La visualización de estas predicciones en un dashboard geoespacial desagregado por barrio permite además priorizar la atención operativa hacia las zonas de mayor riesgo.
+
+El diseño de estos sistemas exige considerar el equilibrio entre sensibilidad y especificidad de las alertas: un sistema que emite demasiadas falsas alarmas erosiona la confianza del operador, mientras que uno excesivamente conservador deja pasar eventos críticos. Este equilibrio, cuantificado mediante la tasa de detección de picos y la tasa de falsas alarmas definidas en la sección anterior, es el criterio central para la selección del modelo final en este trabajo.
+
+Las métricas presentadas en esta sección responden a preguntas distintas y complementarias sobre el comportamiento del modelo. $R^2$ cuantifica si el modelo aporta valor real frente a no tener modelo. RMSE detecta si falla en los episodios de mayor demanda. MAE expresa el error promedio en unidades interpretables. MAPE y WMAPE permiten comparar el rendimiento entre códigos postales de distinta escala sin que el volumen absoluto de consumo distorsione el resultado. Finalmente, TDP y TFA traducen la precisión del modelo en utilidad operativa real: no basta con predecir bien en promedio si el sistema falla en los picos críticos. En este trabajo se reportan todas estas métricas de forma conjunta, siguiendo el criterio de que la selección del modelo final debe equilibrar precisión general, medida por $R^2$, con capacidad de detección de eventos extremos, medida por TDP y TFA.
+
+### 2.9 Trabajos relacionados
+
+La revisión del estado del arte pone de manifiesto que, aunque la predicción de demanda eléctrica y el análisis del entorno urbano barcelonés han sido abordados de forma independiente en la literatura, ningún trabajo previo los ha combinado en un sistema de predicción operativa a escala de código postal basado exclusivamente en datos abiertos. Las contribuciones más directamente relacionadas con este trabajo se describen a continuación.
+
+#### 2.9.1 Gassar (2024): comparativa deep learning vs. machine learning en demanda residencial
+
+Gassar (2024) es el referente metodológico más próximo a este trabajo [gassar2024]. El estudio aborda la predicción a corto plazo del consumo eléctrico esperado en condiciones normales de 337 viviendas residenciales del barrio Atlantech de La Rochelle, Francia, de forma que se pudiera medir el impacto real de los programas de ahorro energético. Para ello se utilizaron lecturas de contadores inteligentes con datos a granularidad de 10 minutos que cubren el consumo total de la vivienda durante 5 meses de temporada de calefacción (noviembre a marzo), agregados a resolución horaria para el entrenamiento y evaluación de los modelos. El horizonte de predicción evaluado no supera las 24 horas, lo que lo sitúa directamente en el mismo rango que este trabajo aunque con una granularidad mucho menor.
+
+El estudio compara de forma sistemática seis arquitecturas de deep learning (BiLSTM, LSTM, GRU, CNN, DNN y RNN) contra quince métodos estadísticos y de machine learning clásico, incluyendo XGBoost, Random Forest y SVR, evaluando su rendimiento a distintos niveles de agregación espacial, desde viviendas individuales hasta el barrio completo. Los resultados mostraron que los modelos de deep learning superan consistentemente a los de ML en todos los niveles de agregación. BiLSTM obtuvo el mejor resultado con un MAPE del 9,08%, seguido de GRU con un 8,71% y LSTM con un 9,42%, frente al 11,56% de XGBoost. Este patrón se mantuvo estable independientemente del nivel de agregación, lo que sugiere que la ventaja de las redes recurrentes no depende de la escala espacial del problema.
+
+Tres aspectos de este benchmark son directamente relevantes para este trabajo. Primero, valida la estrategia progresiva adoptada: SARIMA como baseline estadístico, XGBoost y LightGBM como escalón intermedio, y LSTM y GRU como nivel más avanzado. Segundo, los resultados de XGBoost (11,56%) y GRU (8,71%) sirven como punto de referencia cuantitativo externo para interpretar los resultados obtenidos en el capítulo V, aunque las diferencias de contexto, viviendas individuales en Francia frente a códigos postales en Barcelona, deben tenerse en cuenta al comparar. Tercero, el hecho de que la ventaja de las redes recurrentes sobre XGBoost se mantenga a nivel de barrio agregado es especialmente relevante para este proyecto, que opera precisamente a esa escala de agregación.
+
+#### 2.9.2 Salvati et al. (2017): variación intraurbana de la isla de calor en Barcelona
+
+Salvati, Coch y Cecere investigaron la intensidad del efecto isla de calor urbano (UHI) en Barcelona y su impacto energético en edificios residenciales, utilizando datos de estaciones meteorológicas rurales y urbanas complementados con mediciones de campo a nivel de calle [salvati2017]. El estudio documenta una intensidad media del UHI de 2,8°C en invierno y 1,7°C en verano, con picos que alcanzan los 4,3°C en mediciones a nivel de calle. Mediante simulaciones con EnergyPlus (software de simulación energética de edificios), los autores cuantifican que esta variación térmica intraurbana incrementa la carga de refrigeración de los edificios residenciales entre un 18% y un 28%, en función de la intensidad local del UHI.
+
+Su relevancia para este trabajo es doble. Por un lado, justifica la inclusión de variables de temperatura diferenciadas por código postal como predictores del consumo eléctrico: diferencias microclimáticas de esta magnitud entre barrios de una misma ciudad se traducen directamente en variaciones significativas de la demanda de refrigeración residencial. Por otro, motiva el uso del producto MODIS LST como fuente satelital complementaria a las estaciones meteorológicas convencionales, ya que las estaciones puntuales no capturan la heterogeneidad térmica intraurbana con la resolución espacial necesaria para operar a escala de código postal.
+
+#### 2.9.3 Lim et al. (2021): Temporal Fusion Transformer
+
+Lim et al. introdujeron el Temporal Fusion Transformer (TFT), una arquitectura basada en mecanismos de atención diseñada para superar una limitación habitual en los modelos de deep learning para series temporales: su comportamiento de caja negra, que impide entender cómo el modelo usa cada variable de entrada [lim2021]. TFT resuelve este problema combinando capas recurrentes para capturar dependencias locales a corto plazo con capas de auto-atención interpretables para dependencias a largo plazo, incorporando además mecanismos de selección de variables que permiten identificar qué inputs son más relevantes en cada horizonte de predicción.
+
+Su principal ventaja frente a LSTM y GRU es que integra en un único marco tres tipos de inputs que en otros modelos deben tratarse por separado: covariables estáticas como el código postal o el tipo de barrio, inputs futuros conocidos como los festivos o el calendario, y series exógenas observadas solo en el pasado como la temperatura o la irradiancia. Además, genera predicciones por cuantiles que permiten cuantificar la incertidumbre de las estimaciones, algo especialmente útil en sistemas de alerta donde interesa no solo la predicción puntual sino también su intervalo de confianza.
+
+Su inclusión como trabajo relacionado responde a que representa el estado del arte en forecasting multivariante de series temporales y establece el techo de rendimiento contra el que se posiciona este trabajo. La decisión de no implementarlo se justifica por restricciones de tiempo y complejidad computacional, y se propone como extensión natural en las líneas futuras del capítulo VII.
+
+#### 2.9.4 Khediri et al. (2024): sistema proactivo de alerta de apagones con deep learning
+
+Khediri et al. presentaron un sistema de predicción de eventos de apagón en redes eléctricas inteligentes basado en una combinación de redes neuronales convolucionales (CNN) y mapas auto-organizados profundos (Deep SOM), desarrollado en la Universidad Larbi Tebessi de Argelia [khediri2024]. El sistema analiza datos procedentes de múltiples fuentes simultáneas: demanda eléctrica, generación, transmisión, distribución y pronósticos meteorológicos. Su funcionamiento se basa en identificar, dentro de ventanas temporales históricas, las condiciones que precedieron a eventos de apagón reales, entrenando los modelos con etiquetas binarias que indican si ocurrió o no un blackout en cada ventana. El sistema logra una exactitud del 98,71% y una precisión del 98,65% en la detección de estos eventos.
+
+Su relevancia para este trabajo es doble. Por un lado, valida que un sistema automático basado en datos históricos puede servir como herramienta de alerta temprana efectiva en la operación de la red, sin necesidad de intervención humana en tiempo real. Por otro, establece un precedente metodológico directo para el enfoque de detección de picos adoptado en este trabajo: al igual que Khediri et al. evalúan su sistema mediante métricas de detección de eventos críticos y no solo mediante error de predicción promedio, este trabajo evalúa sus modelos tanto por métricas de error estándar como por la tasa de detección de picos y la tasa de falsas alarmas definidas en la sección anterior.
+
+#### 2.9.5 Suri y Mangal (2025): PowerGNN, red neuronal gráfica para predicción en la red eléctrica
+
+Suri y Mangal propusieron PowerGNN, un modelo que integra convoluciones GraphSAGE con unidades GRU para predecir estados del sistema eléctrico incorporando la topología de la red como información estructural explícita [suri2025]. La motivación del trabajo parte de que los métodos convencionales de predicción ignoran la topología inherente de la red eléctrica, lo que limita su capacidad para capturar dependencias espacio-temporales complejas. El modelo representa la red como un grafo donde los nodos son buses y las aristas son líneas de transmisión, combinando las convoluciones GraphSAGE para capturar correlaciones espaciales con unidades GRU para modelar la evolución temporal. Evaluado sobre el sistema NREL de 118 nodos con perfiles de generación renovable realistas, el modelo alcanzó errores RMSE de entre 0,13 y 0,17, con la menor varianza entre todos los modelos comparados, superando a regresiones lineales y promedios móviles.
+
+Aunque no es directamente aplicable a este trabajo por no disponerse de la topología de la red de distribución de Barcelona, el estudio aporta dos ideas relevantes: que la correlación espacial entre zonas eléctricas vecinas puede explotarse como señal predictora, y que las arquitecturas recurrentes como GRU son competitivas incluso en contextos donde la estructura de grafos añade información adicional. Ambas ideas orientan las líneas futuras descritas en el capítulo VII.
+
+#### 2.9.6 Kuru y Calis (2019): grados-día y SARIMA para modelado de demanda energética
+
+Kuru y Calis construyeron modelos SARIMA sobre series mensuales de grados-día de calefacción (HDD) de Francia entre 1974 y 2017, demostrando que esta variable captura la relación no lineal entre temperatura y demanda energética de forma más directa que la temperatura cruda [kuru2019]. Para seleccionar el modelo óptimo, los autores evaluaron 79 configuraciones SARIMA distintas mediante $R^2$ ajustado, criterios de información AIC y SIC, y análisis de residuos con ACF y PACF. El modelo SARIMA$(2,0,1)(1,0,1)_{12}$ fue seleccionado como modelo final, alcanzando un $R^2$ de 0,9369 y produciendo pronósticos precisos a corto plazo con una componente estacional anual bien identificada.
+
+Este trabajo fundamenta la inclusión de las variables HDD y CDD en el conjunto de features de los modelos de machine learning y deep learning. HDD $= \max(0, 15 - \text{temp_mean})$ cuantifica la intensidad del frío respecto al umbral de confort térmico, activándose únicamente cuando la temperatura cae por debajo de 15°C. CDD $= \max(0, \text{temp_mean} - 22)$ hace lo propio para el calor, activándose solo cuando la temperatura supera los 22°C. Ambas variables transforman la temperatura en una señal directamente proporcional al consumo de calefacción y refrigeración respectivamente, de forma que el modelo recibe explícitamente la intensidad de la presión térmica sobre la demanda en lugar de tener que inferirla a partir de la temperatura bruta. Esto reduce la no linealidad que los modelos deben aprender y mejora la interpretabilidad de las variables meteorológicas en el análisis SHAP.
+
+## 3. Datos y Metodología
+
+### 3.1 Fuentes de datos
+
+#### 3.1.1 Consumo eléctrico por código postal (Open Data BCN)
+
+La fuente principal de datos de este trabajo es el dataset de consumo eléctrico por código postal publicado por el Ayuntamiento de Barcelona a través de su portal Open Data BCN. El dataset registra el consumo eléctrico agregado en bloques de seis horas, desagregado por código postal, sector económico (industria, servicios y residencial) y período temporal, con cobertura desde 2019 hasta 2025. Los datos provienen de la plataforma Datadis, el sistema de información de consumo eléctrico del operador de red español, y se publican con frecuencia anual.
+
+El dataset cubre los 42 códigos postales del municipio de Barcelona. En su formato original, la fuente contiene aproximadamente 1,4 millones de registros en formato largo, donde cada bloque horario de seis horas aparece una vez por sector económico. Tras el proceso de integración y transformación descrito en la sección III.B, los sectores se convierten en columnas mediante pivot, resultando en un dataset final de 424.148 registros y 30 variables, donde cada fila representa un único bloque horario por código postal. La variable objetivo del sistema de predicción es `mwh_total`, que representa el consumo eléctrico agregado por código postal y bloque horario. Las variables de desglose sectorial (`mwh_industria`, `mwh_residencial` y `mwh_servicios`) están disponibles en el dataset pero han sido excluidas del modelado por ser derivadas de la variable objetivo, lo que introduciría fuga de datos en el proceso de entrenamiento.
+
+#### 3.1.2 Datos meteorológicos (Meteocat, Red XEMA)
+
+Los datos meteorológicos provienen de la red de estaciones automáticas XEMA del Servei Meteorològic de Catalunya (Meteocat), accesibles a través de la API SODA del portal Transparència Catalunya. Se utilizan cuatro estaciones con cobertura sobre el área metropolitana de Barcelona: D5 (Observatori Fabra), X2 (Zoo, Parc de la Ciutadella), X4 (El Raval) y X8 (Zona Universitària). Para cada estación se extraen cinco variables: temperatura media, temperatura máxima, temperatura mínima, velocidad del viento y precipitación acumulada. La irradiancia solar se extrae únicamente de la estación X4, ya que es la única de las cuatro que dispone de ese sensor.
+
+La asignación de cada código postal a su estación de referencia se realizó mediante un criterio de proximidad geográfica, generando una tabla de asignación fija utilizada en todo el pipeline. La estación X2 presentó inactividad completa durante 2025 y cobertura parcial en 2024, lo que generó nulos permanentes en las variables de viento e irradiancia para los códigos postales asignados a dicha estación. Esta limitación está documentada en la sección I.E.
+
+#### 3.1.3 Temperatura superficial terrestre (MODIS LST, Terra MOD11A1)
+
+La tercera fuente de datos es el producto satelital MOD11A1 del sensor MODIS a bordo del satélite Terra (NASA), que proporciona estimaciones diarias de temperatura superficial terrestre con una resolución espacial de 1 km. Los datos fueron extraídos mediante Google Earth Engine sobre el área delimitada por los polígonos de los códigos postales de Barcelona, utilizando el proyecto `tfm-energy-bcn`. La conversión a grados Celsius aplica el factor de escala oficial del producto: LST multiplicado por 0,02 menos 273,15.
+
+La inclusión de MODIS LST como variable predictora constituye la principal contribución diferencial de este trabajo respecto a la literatura existente, al incorporar la heterogeneidad térmica intraurbana documentada por Salvati et al. (2017) [salvati2017] como señal explícita en el modelo. El producto utilizado corresponde al paso del satélite Terra, con horario de sobrevuelo aproximado a las 10:30h local. Esta elección representa una limitación respecto al producto MYD11A1 del satélite Aqua, cuyo sobrevuelo a las 13:30h sería más adecuado para capturar el pico del efecto isla de calor urbano, y se propone como mejora en las líneas futuras.
+
+### 3.2 Arquitectura técnica
+
+#### 3.2.1 Stack tecnológico: Docker, Polars, MongoDB
+
+El entorno de desarrollo y ejecución del proyecto está completamente contenedorizado mediante Docker, garantizando la reproducibilidad del sistema con independencia del entorno local. La arquitectura orquesta tres contenedores: el contenedor principal de la aplicación, basado en una imagen Python 3.11 con todas las dependencias del proyecto instaladas; el servidor de base de datos MongoDB 7.0, con persistencia de datos en un volumen dedicado; y una interfaz de administración web Mongo Express para la inspección visual de las colecciones. Los tres servicios se comunican a través de una red interna Docker aislada del exterior, con el puerto de Jupyter expuesto únicamente en local para el desarrollo del análisis exploratorio.
+
+El procesamiento y transformación de datos se realiza íntegramente con Polars, una librería de DataFrames construida sobre Apache Arrow que ofrece rendimiento superior a pandas en operaciones sobre datasets de tamaño medio-grande, gracias a su motor de ejecución en Rust y su soporte nativo para operaciones en paralelo y evaluación lazy. MongoDB actúa como base de datos central del pipeline, almacenando tanto los datos crudos ingestados de cada fuente como los datasets transformados listos para el modelado. La elección de una base de datos documental frente a una relacional responde a la heterogeneidad de esquemas entre fuentes: cada ingester define su propio esquema sin necesidad de migraciones.
+
+#### 3.2.2 Pipeline ETL con patrón OOP (BaseETL)
+
+El pipeline de ingesta y transformación de datos sigue un diseño orientado a objetos basado en una clase abstracta `BaseETL` que define el contrato común para todos los ingestores del proyecto. La clase establece cuatro métodos abstractos que cada ingester concreto debe implementar obligatoriamente: extracción de datos desde la fuente, transformación y limpieza, carga del dato crudo en MongoDB y carga del dato transformado. Un método orquestador `run` encapsula la ejecución secuencial de estas cuatro etapas en una única llamada, garantizando que todos los ingestores siguen exactamente la misma estructura y que la conexión a MongoDB se gestiona y cierra correctamente en cada ejecución. El constructor de la clase base inicializa la conexión a MongoDB, selecciona la base de datos configurada mediante variables de entorno y crea un logger específico para cada subclase, lo que permite trazabilidad granular por ingester en los logs del sistema.
+
+#### 3.2.3 CI con GitHub Actions
+
+La calidad del código se garantiza mediante un pipeline de integración continua implementado con GitHub Actions, que se ejecuta automáticamente en cada push a las ramas `develop` y `main`. El pipeline aplica cuatro herramientas en secuencia: Black para formateo automático del código, isort para ordenación de imports, Pylint para análisis estático con umbral mínimo de puntuación de 7.0 sobre 10, y Mypy para verificación de tipos estáticos con Python 3.11. La suite de tests unitarios cubre los tres ingestores principales del pipeline (electricidad, Meteocat y MODIS LST) y se ejecuta como parte del mismo flujo de validación mediante pytest.
+
+### 3.3 Extracción de datos y transformación inicial
+
+La construcción del dataset final está implementada a través de cuatro módulos independientes que siguen el patrón `BaseETL`, más un quinto módulo orquestador `DatasetBuilder` que integra todas las fuentes en un único dataset tabular.
+
+El ingester de consumo eléctrico consulta primero la API del catálogo de Open Data BCN para obtener dinámicamente la lista de recursos disponibles, en lugar de codificar directamente las URLs de descarga. Esta decisión es deliberada: los identificadores de recurso cambian con cada nueva publicación anual, por lo que un enfoque con URLs fijas requeriría mantenimiento manual cada año. Cada CSV se descarga directamente a un buffer en memoria sin escritura intermedia en disco, utilizando el contenido de bytes que Polars puede leer de forma nativa. Durante la transformación se descartan los registros donde el bloque horario tiene valor *no consta*, ya que no pueden ser asignados temporalmente y corromperían la construcción del campo datetime. El timestamp se construye combinando el campo de fecha con la hora de inicio del bloque, extraída mediante expresión regular del campo de texto del tramo horario. El campo de código postal se normaliza a cinco dígitos con relleno de ceros a la izquierda, corrigiendo una inconsistencia frecuente en la fuente original donde algunos códigos postales pierden el cero inicial, lo que causaría fallos de join con el GeoJSON municipal. La carga en MongoDB utiliza upsert por clave compuesta de código postal, datetime y sector económico, lo que permite re-ejecutar el ingester sin generar duplicados y actualizar parcialmente el histórico cuando se publican nuevos datos anuales.
+
+El ingester meteorológico pagina la extracción por estación, año y mes de forma anidada, incrementando el offset hasta agotar los registros disponibles para cada combinación, dado que la API SODA de Transparència Catalunya impone un límite de registros por página. El filtro de calidad acepta registros con estado V (válido) o registros sin campo de estado. Esta lógica dual es necesaria porque el esquema de la API cambió en 2024: los registros anteriores incluyen un campo de estado donde V indica lectura validada y otros valores indican lecturas provisionales o erróneas, mientras que los registros de 2024 en adelante carecen de ese campo por completo. Aceptar registros sin campo de estado garantiza que los datos recientes no se filtren incorrectamente. Tras el filtrado, los datos se convierten de formato largo a ancho mediante pivot, donde cada código numérico de variable meteorológica se transforma en una columna con nombre descriptivo, y el parámetro de agregación usa la media para cubrir el caso de lecturas duplicadas en el mismo timestamp.
+
+El ingester de MODIS LST descarga el CSV exportado desde Google Drive a un buffer en memoria mediante la librería `gdown`, siguiendo el flujo estándar de Google Earth Engine que no ofrece endpoint de descarga directa. La conversión del valor crudo a grados Celsius aplica el factor de escala oficial del producto MOD11A1: el valor entero almacenado por MODIS se multiplica por 0,02 para obtener Kelvin y se le resta 273,15 para convertir a Celsius, redondeando a dos decimales para eliminar el ruido de la aritmética en punto flotante. El campo de código postal recibe el mismo tratamiento de normalización a cinco dígitos que en el ingester de electricidad.
+
+El `DatasetBuilder` lee las cuatro colecciones limpias de MongoDB y orquesta su integración en cinco pasos. Primero, el consumo eléctrico se pivota de formato largo a ancho, convirtiendo cada sector económico en una columna independiente, y el consumo total se calcula como suma horizontal de todas las columnas de consumo incluyendo el sector no especificado, garantizando que `mwh_total` representa el consumo real completo. Segundo, los registros diarios de MODIS LST se expanden a cuatro registros de seis horas mediante producto cruzado con los offsets 0h, 6h, 12h y 18h, ya que la fuente satelital tiene resolución diaria pero el dataset opera a resolución de seis horas. Tercero, los registros meteorológicos de Meteocat se agregan a bloques de seis horas mediante truncación del timestamp y agrupación por estación y bloque, calculando media, máximo y mínimo de temperatura, media de humedad, viento e irradiancia, y suma acumulada de precipitación. Cuarto, se construye la tabla de asignación geográfica calculando el centroide de cada polígono de código postal a partir del GeoJSON municipal y asignando a cada centroide la estación Meteocat más próxima por distancia euclídea entre coordenadas. Quinto, el dataset final se construye mediante cuatro joins encadenados por izquierda: consumo eléctrico con MODIS sobre código postal y datetime; resultado con festivos sobre la fecha truncada al día; resultado con la tabla de asignación geográfica sobre código postal; y resultado con Meteocat sobre código de estación y datetime.
+
+Sobre el dataset integrado se calculan siete variables derivadas directamente a partir del campo datetime y del resultado del join con festivos: hora del día, día de la semana, mes, año, semana del año, indicador binario de fin de semana (`es_finde`, con valor 1 para sábado y domingo) e indicador binario de festivo (`es_festivo`, con valor 1 cuando el bloque corresponde a una fecha festiva oficial). Estas variables no provienen de ninguna fuente externa sino que son construidas íntegramente por el `DatasetBuilder` y constituyen el núcleo del feature set de calendario disponible para el modelado.
+
+Antes de la carga final, el `DatasetBuilder` ejecuta una validación que verifica que el dataset no esté vacío y que las columnas críticas datetime, `cod_postal` y `mwh_total` estén presentes, y registra el conteo de filas duplicadas y nulos por columna para documentación. La carga reconstruye la colección completa en cada ejecución en lugar de hacer upsert, ya que el dataset integrado se genera siempre desde cero a partir de las colecciones limpias. El dataset final contiene 424.148 registros y 30 variables, cubriendo el período 2019–2025 con granularidad de seis horas y resolución espacial de código postal.
+
+### 3.4 Análisis exploratorio de datos (EDA)
+
+El análisis exploratorio se realiza sobre la colección `dataset_eda` producida por el pipeline ETL y persiste sus resultados en una versión limpia (`dataset_clean`) lista para el feature engineering. Su objetivo es comprender la estructura, calidad y comportamiento del dataset antes del modelado, e identificar los patrones que condicionan las decisiones posteriores de ingeniería de variables y de arquitectura de modelo.
+
+#### 3.4.1 Descripción del dataset: 424.148 registros × 30 variables (2019–2025)
+
+El dataset de partida contiene 424.148 registros y 30 variables, con cobertura de los 42 códigos postales de Barcelona en bloques de seis horas entre 2019 y 2025. Cada fila queda identificada de forma única por la pareja `datetime`–`cod_postal`, y la variable objetivo es `mwh_total`. Las variables se agrupan en cuatro bloques: identificación espacial (código postal, nombre de barrio, centroide y estación meteorológica asignada), consumo (total y desglose sectorial), variables meteorológicas (temperatura del aire, humedad, viento, precipitación, irradiancia y temperatura superficial MODIS) y variables de calendario. Tras el tratamiento de calidad descrito a continuación, el dataset asciende a 424.368 registros por la incorporación de 220 bloques ausentes en la rejilla temporal.
+
+#### 3.4.2 Tratamiento de nulos e imputaciones
+
+El análisis de valores ausentes revela que los nulos del dataset son mayoritariamente estructurales y conocidos: la estación X2 nunca dispuso de sensores de viento ni irradiancia (100% de nulos) y dejó de reportar temperatura y humedad de forma progresiva en 2024–2025; la temperatura superficial MODIS presenta en torno a un 40% de ausencias por cobertura nubosa; y el sector `mwh_no_especificado` carece de valor en el 85% de los registros por tratarse de un campo incorporado en 2025.
+
+El tratamiento aplica varias estrategias. La estación AN (Parc de la Ciutadella), inactiva en todo el periodo, se reasigna a X2, con la que se solapa físicamente. La rejilla temporal se completa imputando 220 bloques ausentes con la mediana histórica por código postal, hora, día de la semana y mes. Los registros con `mwh_total` nulo o igual a cero por fallos puntuales de la fuente (378 registros en tres fechas de 2025) y los valores atípicos por errores de acumulación de reporte (520 registros en seis códigos postales) se imputan también por mediana histórica, mientras que los picos reales asociados a olas de calor o de frío se conservan como parte de la variabilidad natural del sistema. Todas las imputaciones por mediana son **causales**: utilizan exclusivamente los tres años limpios anteriores al punto imputado, excluyendo el año atípico de la pandemia (2020), lo que evita cualquier fuga de datos del futuro hacia el pasado. Los nulos meteorológicos restantes se mantienen para su tratamiento específico en la fase de feature engineering.
+
+#### 3.4.3 Distribución del consumo por barrio y sector económico
+
+La distribución de `mwh_total` presenta un fuerte sesgo positivo, próximo a una log-normal tras el tratamiento de atípicos, por lo que se descartan los supuestos de normalidad y se emplean métodos no paramétricos (correlación de Spearman y contrastes de Kruskal–Wallis y Mann–Whitney). El sector servicios domina el consumo en 38 de los 42 códigos postales; la industria solo es relevante en tres o cuatro barrios (Zona Franca, Montjuïc y El Bon Pastor), y el componente residencial alcanza su máximo en barrios periféricos como El Carmel. Esta composición sectorial explica una heterogeneidad espacial extrema, con un rango de ocho veces entre el código postal de menor consumo (Vallbona) y el de mayor (Zona Franca). El contraste de Kruskal–Wallis confirma que el código postal es el factor más discriminante del dataset, por encima de cualquier variable temporal, lo que justifica incorporar la identidad del barrio de forma explícita en el modelado: como series independientes en los modelos estadísticos clásicos y como variable categórica en el modelo global de machine learning.
+
+#### 3.4.4 Patrones temporales: diarios, semanales, estacionales (STL)
+
+El consumo responde a tres ciclos superpuestos. A nivel intradiario, el bloque de mediodía concentra el máximo (120k MWh) y el de madrugada el mínimo (71k MWh), una diferencia del 69%. A nivel semanal, los días laborables superan en torno a un 19% al domingo, y los festivos reducen el consumo un 15% adicional por la paralización simultánea de industria, servicios y comercio. A nivel anual se observa un doble pico estival e invernal con valle en primavera, además de la caída del 12% durante el confinamiento de 2020. El mapa de calor hora×día revela que el efecto del día de la semana depende del bloque horario (nulo en la madrugada y máximo al mediodía), hallazgo que motiva la variable de interacción `hora_x_finde`. La descomposición STL con periodo semanal (28 bloques) confirma una serie sin tendencia sostenida, con estacionalidad semanal de amplitud estable y un residuo próximo a cero salvo en eventos puntuales, lo que valida un modelo aditivo.
+
+#### 3.4.5 Análisis de estacionariedad (ADF, KPSS)
+
+Para caracterizar la estacionariedad se aplican de forma conjunta dos contrastes complementarios [hyndman2021]. El test de Dickey–Fuller aumentado (ADF), cuya hipótesis nula es la presencia de raíz unitaria, rechaza dicha hipótesis ($p<0,05$) en la serie global y en los códigos postales representativos, lo que indica estacionariedad en media. El test KPSS, cuya hipótesis nula es la estacionariedad, también la rechaza ($p<0,05$), señalando que la varianza no es constante por los cambios estructurales visibles en la descomposición (pandemia, recuperación y mayor variabilidad industrial reciente). La conclusión es una estacionariedad parcial: estacionaria en media pero no en varianza. En términos de modelado, esto implica que SARIMA requerirá diferenciación estacional ($D=1$) pero no diferenciación regular ($d=0$), mientras que los modelos basados en árboles y redes recurrentes son robustos a esta condición.
+
+#### 3.4.6 ACF y PACF: identificación de estructura temporal
+
+Las funciones de autocorrelación (ACF) y autocorrelación parcial (PACF) identifican los retardos más informativos de la serie [hyndman2021, boxjenkins2015]. La ACF alcanza su valor máximo en el retardo 28 (mismo bloque de hace una semana, $0,87$) y un valor elevado en el retardo 4 (mismo bloque del día anterior, $0,83$), con picos repetidos cada cuatro retardos que reflejan la persistencia del ciclo diario. La PACF muestra la contribución directa más fuerte en el retardo 4 ($0,75$), seguida de los retardos 3 ($0,47$) y 1 ($0,37$). Estos resultados fundamentan tanto la selección de los rezagos del conjunto de variables como los órdenes iniciales de los modelos SARIMA.
+
+#### 3.4.7 Correlación consumo-temperatura y análisis geoespacial
+
+La relación entre el consumo y la temperatura es marcadamente no lineal, con forma de U: el consumo aumenta tanto en condiciones de frío (calefacción) como de calor (refrigeración), lo que explica los bajos coeficientes de correlación de Spearman, que subestiman las relaciones no lineales. Las variables `temp_max` y `temp_min` presentan colinealidad extrema con `temp_mean` ($0,95$–$0,99$) y se descartan. La temperatura superficial MODIS, pese a su correlación de $0,87$ con la temperatura del aire, aporta información complementaria al capturar la variación térmica intraurbana asociada a la isla de calor urbana [salvati2017], por lo que se conserva como predictor. Un análisis de componentes principales de carácter confirmatorio agrupa las variables meteorológicas en cuatro componentes que explican el 89,6% de la varianza, sin redundancia problemática. El análisis geoespacial mediante mapas coropléticos por código postal evidencia la heterogeneidad espacial del consumo y de la temperatura superficial.
+
+### 3.5 Feature engineering
+
+A partir del dataset limpio, la fase de ingeniería de variables construye los predictores que alimentan los modelos, fundamentando cada decisión en los hallazgos del EDA. Las variables derivadas se agrupan en rezagos temporales, variables meteorológicas, variables de interacción y la imputación meteorológica final.
+
+#### 3.5.1 Variables de calendario y rezagos (`lag_1`, `lag_2`, `lag_3`, `lag_4`, `lag_28`, `rolling_mean_7d`, `rolling_std_7d`)
+
+Sobre las variables de calendario ya construidas por el pipeline ETL (hora, día de la semana, mes, año, fin de semana y festivo) se añaden los rezagos del consumo, calculados de forma independiente por código postal y ordenados cronológicamente para no mezclar series ni romper la causalidad. Se incorporan `lag_1` (6h), `lag_2` (12h), `lag_3` (18h) y `lag_4` (24h), que reconstruyen el perfil completo del día anterior y están respaldados por la PACF, y `lag_28` (una semana), el retardo más correlacionado de la serie. Se añaden además dos estadísticos móviles de siete días, desplazados un bloque para evitar fuga de datos: `rolling_mean_7d`, que captura la tendencia reciente, y `rolling_std_7d`, que captura la volatilidad reciente y resulta especialmente útil para el componente de alerta temprana. Los rezagos de dos y tres semanas se posponen a una evaluación posterior: el de dos semanas (`lag_56`) se incorpora como hiperparámetro en la búsqueda de la fase de machine learning, donde resulta seleccionado (sección IV.B).
+
+#### 3.5.2 Variables meteorológicas y temperatura superficial (MODIS LST)
+
+Para capturar la relación no lineal entre temperatura y consumo se construyen los grados-día de calefacción y refrigeración [kuru2019]: $\text{HDD}=\max(0, 15-\text{temp})$ y $\text{CDD}=\max(0, \text{temp}-22)$, que descomponen la forma de U en dos rampas lineales aprovechables por los modelos. El método grados-día está respaldado por Kuru y Çalış [kuru2019], si bien su estudio se circunscribe a Francia y modela únicamente el HDD, propio de un clima templado; los umbrales empleados aquí se ajustan al estándar europeo de Eurostat [eurostat_chdd], que fija el umbral de activación de HDD en 15°C, y a la evidencia para el clima mediterráneo español [cienciastecnologia2012], donde la refrigeración (CDD) adquiere un peso creciente que justifica su inclusión explícita frente al enfoque solo-calefacción del estudio original. El umbral de 22°C para el CDD se apoya además en Giannakopoulos y Psiloglou [giannakopoulos2006], que identificaron 22°C como la temperatura ambiente de mínimo consumo energético en Atenas, ciudad de clima mediterráneo equivalente al de Barcelona. Para capturar la inercia térmica del parque edificado (el calor acumulado de los días previos que eleva la demanda de refrigeración más allá de la temperatura instantánea) se añade `cdd_roll_3d`, media móvil del CDD de los últimos tres días por código postal; un modelo de árboles no puede derivar esta acumulación por sí mismo, ya que opera registro a registro y solo dispone del CDD del bloque actual. El efecto rezagado de la temperatura sobre la demanda eléctrica española está documentado por Pardo, Meneu y Valor [pardo2002], que prueban que la especificación dinámica de la temperatura es significativa incluso tras controlar los efectos autorregresivos. La falta de cobertura MODIS se convierte en señal informativa mediante el indicador `lst_nublado`, y la precipitación se binariza en `precipitacion_llueve`, dado que el EDA mostró que la información útil reside en si llueve o no, y no en la cantidad. La imputación meteorológica resuelve los nulos estructurales heredados: la temperatura y la humedad de la estación X2 en 2024–2025 se imputan desde la estación X4 aplicando un factor de corrección mensual basado en el cociente histórico X2/X4 (2019–2023); el viento y la irradiancia se toman directamente de X4; los nulos esporádicos de otras estaciones se completan con el mismo respaldo; y los valores negativos de irradiancia, físicamente imposibles, se truncan a cero. La temperatura superficial MODIS se conserva como predictor de la heterogeneidad térmica intraurbana [salvati2017].
+
+#### 3.5.3 Variables de interacción: `hora_x_finde`, `is_covid`
+
+Se construyen dos variables de control e interacción. La variable `hora_x_finde`, producto de la hora por el indicador de fin de semana, codifica en una única variable la amplificación diurna del efecto del calendario detectada en el mapa de calor hora×día, que un modelo con la hora y el fin de semana por separado no capturaría. La variable `is_covid`, con valor 1 en 2020, aísla el cambio estructural provocado por la pandemia para que el modelo no lo confunda con un patrón estacional recurrente.
+
+#### 3.5.4 Perfil sectorial por código postal
+
+La composición sectorial de cada código postal (industria, residencial y servicios) determina su patrón de consumo y es, según el EDA, la principal fuente de la heterogeneidad espacial del dataset. Como los consumos sectoriales son componentes directos del objetivo y no pueden emplearse como predictores sin incurrir en fuga de datos, se resume la identidad de cada barrio en tres proporciones (`pct_industria_cp`, `pct_residencial_cp` y `pct_servicios_cp`), calculadas como media móvil rezagada de doce meses sobre el consumo de cada sector. La ventana de doce meses es causal (solo emplea el pasado, por lo que es independiente del punto de corte entre entrenamiento y prueba) y, al cubrir un ciclo anual completo, cancela la estacionalidad y deja únicamente la identidad estructural del barrio, capturando además su deriva lenta (por ejemplo, la reconversión de El Poblenou hacia el sector terciario). La utilidad de segmentar el consumo por perfil de carga para la predicción está respaldada por la literatura de agrupamiento de patrones de carga [rajabi2020] y por su aplicación a la predicción energética en barrios urbanos [jiang2024].
+
+#### 3.5.5 Asignación de estaciones Meteocat por código postal (D5, X2, X4, X8)
+
+La asignación de cada código postal a su estación meteorológica de referencia se realiza en el pipeline ETL calculando el centroide de cada polígono postal a partir del GeoJSON municipal y seleccionando la estación más próxima por distancia euclídea entre coordenadas, sobre un conjunto de cinco estaciones candidatas (D5, X2, X4, X8 y AN). La estación AN (Parc de la Ciutadella) carece de sensores activos en todo el periodo, por lo que sus códigos postales se reasignan en el EDA a X2, con la que se solapa físicamente a menos de doscientos metros, quedando cuatro estaciones efectivas con datos: D5, X2, X4 y X8. La estación X2 presenta las limitaciones ya descritas (ausencia permanente de sensores de viento e irradiancia e inactividad progresiva en 2024–2025), gestionadas mediante la imputación desde X4.
+
+### 3.6 Auditoría de calidad del dato y conjunto de evaluación
+
+Antes del modelado se realizó una auditoría sistemática de la integridad del objetivo por código postal, comparando la media mensual de cada serie en 2025 con la de sus mismos meses del período de referencia 2019–2022 para controlar la estacionalidad. La auditoría reveló un artefacto relevante de la fuente: Open Data BCN reasigna consumo entre códigos postales a lo largo del tiempo. Doce códigos presentan quiebres abruptos y sostenidos de nivel (colapsos a valores próximos a cero o inflaciones de hasta cuatro veces el nivel histórico) concentrados en 2024–2025, mientras el consumo agregado de la ciudad permanece dentro de su rango histórico. El patrón se verificó contra los datos crudos de la fuente, lo que descarta que fuera introducido por el pipeline ETL: la estructura de registros está completa (el número de filas mensuales se mantiene constante), pero los valores se redistribuyen entre códigos. La explicación más consistente es la reasignación de grandes puntos de suministro (CUPS) entre códigos postales por cambios de geocodificación de la distribuidora: dado que el consumo de un código está dominado por pocos suministros de gran tamaño, un cambio de asignación desplaza el nivel de la serie de forma escalonada, comportamiento que ningún modelo puede anticipar por tratarse de una decisión administrativa y no de demanda real.
+
+En consecuencia, los doce códigos postales con objetivo corrupto en los períodos de validación (enero–septiembre de 2025) o test (octubre–noviembre de 2025) (incluido el 08037, cuyo objetivo de julio a noviembre de 2025 fue imputado en el EDA) se excluyen del estudio de modelado, que se realiza sobre los 30 códigos postales restantes con series íntegras. Estos códigos no se descartan del proyecto: constituyen precisamente el tipo de evento que el módulo de detección de anomalías del sistema de alerta debe señalar. La auditoría documenta además que el período 2025 presenta una volatilidad sistemáticamente superior a la histórica (incrementos del coeficiente de variación de entre el 30% y el 80% en la mitad de los códigos postales), lo que impone un techo a la precisión alcanzable por cualquier modelo en validación y test.
+
+### 3.7 Metodología y diseño experimental
+
+El proyecto sigue un flujo de trabajo inspirado en la metodología CRISP-DM, recorriendo de forma iterativa las fases de comprensión y preparación de los datos (secciones III.C a III.E), modelado y evaluación. El diseño experimental se concibe para garantizar una comparación directa y justa entre las distintas familias de modelos.
+
+#### 3.7.1 Estrategia de partición temporal: train / validation / test
+
+La partición de los datos es estrictamente temporal, sin aleatorización, de forma coherente con el carácter causal de las imputaciones y para evitar cualquier fuga de información del futuro. El conjunto de entrenamiento abarca de 2019 a 2024; el conjunto de validación comprende los meses de enero a septiembre de 2025 y se emplea para la selección de órdenes e hiperparámetros con control de sobreajuste; y el conjunto de test corresponde a los meses de octubre y noviembre de 2025, el periodo más reciente disponible, que permanece intacto durante todo el entrenamiento y la selección. La modelización opera a escala de código postal con dos arquitecturas distintas según la familia: los modelos estadísticos clásicos ajustan una serie independiente por código postal, mientras que los modelos de machine learning emplean un único modelo global multi-serie (sección IV.B). Esta partición estrictamente cronológica es la práctica recomendada para la evaluación de modelos de series temporales: una validación cruzada con barajado aleatorio introduciría observaciones del futuro en el entrenamiento y produciría métricas optimistas no realizables en explotación [hyndman2021].
+
+#### 3.7.2 Backtesting con ventana deslizante
+
+La capacidad predictiva se estima mediante backtesting con ventana deslizante (*walk-forward*): el modelo se ajusta sobre el conjunto de entrenamiento, genera una predicción para el horizonte fijado, avanza la ventana incorporando las observaciones reales y repite el proceso a lo largo del periodo de evaluación, esquema conocido como evaluación sobre un origen de pronóstico móvil (*rolling forecasting origin*) [hyndman2021]. Se consideran horizontes de 24, 48 y 72 horas, siendo el de 72 horas el principal por su mayor margen para la alerta temprana; reportar los tres permite cuantificar cómo se degrada la precisión a medida que se predice más lejos. El mismo arnés de backtesting se aplica de forma idéntica a todos los modelos, con un modelo *naive* estacional (consumo del mismo bloque de la semana anterior) como referencia mínima.
+
+#### 3.7.3 Progresividad de modelos: de simple a complejo
+
+La comparación sigue una progresión de complejidad creciente, donde cada modelo solo se justifica si supera al anterior bajo el mismo arnés de evaluación: del *naive* estacional a los modelos clásicos SARIMA y SARIMAX, de estos a los modelos de *gradient boosting* XGBoost y LightGBM, y finalmente a las redes recurrentes LSTM y GRU. Este enfoque permite cuantificar la aportación marginal de cada incremento de complejidad.
+
+#### 3.7.4 Selección de modelos y registro de experimentos
+
+La métrica principal de decisión es el coeficiente de determinación R², que se busca maximizar, acompañado de MAE, RMSE y MAPE como métricas secundarias. La selección de modelos incorpora un control explícito de sobreajuste: en lugar de elegir directamente la mejor combinación del *grid search*, se registran todos los resultados, se calcula la diferencia relativa entre el R² de entrenamiento y el de validación de cada combinación, y se selecciona la de mayor R² de validación cuya diferencia relativa no supere el 10%. Cuando ninguna combinación baja de ese umbral, como ocurre en este trabajo por el techo que impone la degradación de la calidad del dato en 2025 (sección III.F), se aplica el criterio de respaldo de elegir la de mayor R² de validación documentando su diferencia relativa. Los resultados de cada experimento se registran en ficheros CSV y en MongoDB para su trazabilidad; la incorporación de una herramienta de seguimiento como MLflow se contempla como posible mejora futura en función del avance del trabajo.
+
+## 4. Desarrollo de Modelos
+
+### 4.1 Baseline: SARIMA / SARIMAX
+
+Los modelos baseline establecen la referencia de rendimiento contra la que se comparan las familias de mayor complejidad. Se construyen tres modelos de complejidad creciente (un *naive* estacional, un SARIMA y un SARIMAX), ajustados de forma independiente por código postal y evaluados bajo el mismo arnés de backtesting con ventana deslizante descrito en la metodología.
+
+#### 4.1.1 Modelo de referencia: *naive* estacional
+
+El umbral mínimo lo fija un modelo *naive* estacional que predice cada bloque con el valor del mismo bloque de la semana anterior, es decir, un retardo de $s=28$ bloques de seis horas. Este modelo carece de parámetros y captura exclusivamente la fuerte periodicidad semanal identificada en el EDA; cualquier modelo posterior debe superarlo para justificar su complejidad adicional.
+
+#### 4.1.2 Identificación y selección de órdenes
+
+La estructura de los modelos SARIMA se deriva del análisis de la serie realizado en el EDA. Las pruebas de estacionariedad muestran una estacionariedad parcial (el test ADF rechaza la hipótesis de raíz unitaria, confirmando estacionariedad en media, mientras que el KPSS la rechaza en varianza) cuya componente no estacionaria es de naturaleza estacional. En consecuencia se fija una diferenciación regular nula ($d=0$), para no sobre-diferenciar una serie sin tendencia sostenida, y una diferenciación estacional unitaria ($D=1$) con periodo $s=28$ que absorbe el ciclo semanal. Las funciones de autocorrelación simple y parcial (ACF/PACF) orientan los órdenes autorregresivo y de media móvil: la PACF mantiene contribuciones directas significativas hasta el tercer o cuarto retardo y la ACF decae de forma gradual, lo que sugiere un orden de partida $(p,d,q)=(3,0,1)$ y $(P,D,Q)_s=(1,1,1)_{28}$, en línea con la metodología clásica de Box–Jenkins [boxjenkins2015].
+
+Estos órdenes semilla no se adoptan directamente, sino que sirven de centro a una búsqueda en rejilla acotada. Conforme al criterio de control de sobreajuste descrito en la metodología, para cada combinación se registran el R² de entrenamiento y el de validación (ambos medidos al mismo horizonte de 72 horas para que la comparación sea homogénea y no confunda el sobreajuste real con el simple aumento de dificultad del horizonte) y se calcula su diferencia relativa. En la práctica, ninguna combinación baja del umbral del 10%: esa diferencia no refleja sobreajuste del modelo, sino la degradación de la calidad del dato en 2025 documentada en la auditoría (sección III.F), común a todas las configuraciones; por ello se aplica el criterio de respaldo acordado, seleccionar la combinación de mayor R² de validación documentando su diferencia relativa. La búsqueda se realiza sobre cuatro códigos postales representativos de los perfiles del EDA (industrial 08038, mixto 08032, de servicios 08002 y residencial 08027) y el orden ganador se aplica de forma común a los 30 códigos postales del conjunto de evaluación, lo que garantiza una comparación homogénea y acota el coste computacional. El orden resultante es $(2,0,1)(1,1,1)_{28}$: el componente autorregresivo más parsimonioso alcanza un R² de validación prácticamente equivalente al de orden tres (0,605 frente a 0,610 de media sobre los cuatro códigos) pero con una diferencia relativa menor, por lo que se prefiere por parsimonia.
+
+#### 4.1.3 Variables exógenas del SARIMAX
+
+El SARIMAX amplía el SARIMA incorporando regresores externos conocidos en el momento de la predicción, agrupados en tres bloques. El bloque climático incluye los grados-día de calefacción y refrigeración (`HDD`, `CDD`) y la humedad media; la temperatura media se excluye deliberadamente por su elevada colinealidad con los grados-día (correlación de Spearman entre 0,81 y 0,86), que en un modelo lineal desestabiliza la estimación de los coeficientes. El bloque de calendario aporta los indicadores de festivo (`es_festivo`) y de pandemia (`is_covid`). Por último, dado que la diferenciación estacional semanal ($s=28$) no modela el ciclo intradiario, este se introduce de forma explícita mediante dos términos de Fourier de la hora (`sin_dia`, `cos_dia`) que codifican el periodo de 24 horas. Los rezagos del consumo no se incorporan como exógenas, puesto que la dependencia autorregresiva ya la modela el propio componente AR del SARIMA. Se asume pronóstico perfecto de las exógenas (se emplean los valores meteorológicos reales del periodo de evaluación), lo que acota el análisis a la capacidad estructural del modelo y la aísla de la calidad de un eventual pronóstico meteorológico.
+
+#### 4.1.4 Arnés de evaluación y ajuste por código postal
+
+Cada modelo se ajusta de forma independiente sobre la serie de entrenamiento de cada código postal (2019–septiembre de 2025) y se evalúa sobre el conjunto de test reservado (octubre–noviembre de 2025) mediante backtesting con ventana deslizante. Para los modelos estadísticos, el avance de la ventana actualiza el estado del filtro con las observaciones reales sin re-estimar los parámetros en cada paso, procedimiento computacionalmente viable y suficiente para un horizonte corto. La predicción a cada horizonte (24, 48 y 72 horas) reutiliza el mismo ajuste variando únicamente el número de pasos proyectados, lo que permite cuantificar la degradación del error con el horizonte sin coste adicional de entrenamiento. La trazabilidad se garantiza registrando todos los resultados en ficheros CSV y en la base de datos MongoDB.
+
+Sobre el conjunto de test (octubre–noviembre de 2025, horizonte de 72 horas), el SARIMA alcanza un R² mediano de 0,808 (media 0,758) sobre los 30 códigos postales, con un MAE medio de 8.746 MWh y un MAPE medio del 9,1%, superando con holgura al *naive* estacional (R² mediano 0,722, media 0,618). El SARIMAX, en cambio, no mejora al SARIMA: su R² mediano es de 0,788 (media 0,755) con un MAPE medio del 9,3% (en el código 08031 el ajuste del SARIMAX no convergió y queda excluido de su promedio). La incorporación de las variables exógenas climáticas y de calendario no aporta, por tanto, un incremento de R² apreciable en agregado, e incluso lo reduce de forma marginal. Este resultado es coherente con el análisis de importancia de variables posterior (sección IV.B.3): en horizontes cortos y con el consumo reciente disponible, la dependencia autorregresiva y la diferenciación estacional del SARIMA ya absorben la mayor parte de la señal térmica, de modo que el bloque exógeno aporta información en buena medida redundante [pardo2002]. La degradación de la calidad del dato en 2025 documentada en la auditoría (sección III.F) impone además un techo común a ambos modelos. La comparativa sistemática frente a las familias de mayor complejidad se presenta en el capítulo V.
+
+### 4.2 Machine Learning: gradient boosting global (LightGBM y XGBoost)
+
+A diferencia del baseline, que ajusta un modelo independiente por código postal, la familia de gradient boosting se implementa como un modelo **global multi-serie**: un único LightGBM entrenado simultáneamente sobre las series de los 30 códigos postales del conjunto de evaluación. La literatura de modelos globales muestra que entrenar un solo modelo sobre grupos de series relacionadas puede mejorar la generalización frente al ajuste serie a serie, al estimar los patrones comunes con la información agregada de todas ellas [montero2021]. La identidad de cada serie se incorpora como variable categórica nativa del modelo, de modo que este aprende simultáneamente el patrón compartido y las diferencias de nivel y forma entre barrios. La implementación se apoya en la librería skforecast [skforecast], que envuelve el regresor en un esquema de predicción recursiva multi-paso. De la familia XGBoost/LightGBM presentada en la sección II.D se evalúan sus dos exponentes bajo el mismo arnés: primero LightGBM [ke2017], por su soporte nativo de variables categóricas y su eficiencia computacional, y después XGBoost [chen2016], para contrastar las dos implementaciones de gradient boosting y comprobar si la elección de librería altera las conclusiones. Ambos comparten el resto del diseño (predictores, arnés de backtesting y control de sobreajuste), de modo que la comparación entre ellos es directa.
+
+El diseño de esta fase sigue el flujo de trabajo de referencia para forecasting de demanda eléctrica con skforecast [skforecast], adaptado al contexto de este trabajo mediante tres decisiones deliberadas. Primera, el ajuste no se realiza serie a serie sino con un único modelo global multi-serie, por las razones de generalización ya expuestas. Segunda, la ingeniería de variables se resuelve íntegramente en la fase previa (sección III.E) y las variables de calendario se incorporan en forma ordinal en lugar de mediante codificación cíclica (seno/coseno): a diferencia de los modelos lineales, los modelos de árboles particionan el espacio de predictores mediante umbrales y no necesitan que la representación de la hora o del día preserve la continuidad del ciclo, por lo que la codificación cíclica no aporta ventaja. Tercera, los intervalos de predicción se construyen a partir de los residuos *out-of-sample* por código postal (sección V.C) en lugar de recurrir a la interfaz conformal directa de la librería, con el fin de mantener el control y la transparencia del método en el escenario multi-serie. El resto del procedimiento (backtesting con ventana deslizante, optimización de hiperparámetros, selección de predictores y forecasting probabilístico) reproduce el de la referencia.
+
+Los predictores se organizan en cuatro grupos según su papel. Los rezagos del consumo (1, 2, 3, 4, 28 y 56 bloques) y los estadísticos de ventana móvil (media y desviación típica de 28 bloques, equivalentes a los `rolling` de siete días del feature engineering) no se toman de las columnas precalculadas en la fase de ingeniería de variables, sino que los genera internamente el framework en cada paso de la predicción recursiva: en una predicción multi-paso, las columnas precalculadas contendrían valores reales del futuro e introducirían fuga de datos. Las variables exógenas (clima, calendario y perfil sectorial) sí se incorporan como columnas, asumiendo, igual que en SARIMAX, pronóstico perfecto durante la evaluación.
+
+#### 4.2.1 LightGBM: hiperparametrización y tuning
+
+La optimización sigue el criterio de control de sobreajuste de la metodología (sección III.G) mediante dos estrategias complementarias cuyos resultados completos se registran en CSV: una búsqueda en rejilla acotada (16 combinaciones de número de árboles, profundidad máxima y tasa de aprendizaje, cruzadas con dos juegos de rezagos) y una búsqueda bayesiana de 30 iteraciones implementada con Optuna [optuna2019], que explora adicionalmente el número de hojas y la regularización L1/L2. La búsqueda bayesiana superó a la rejilla (mejor $R^2$ de validación de la búsqueda de 0,663 frente a 0,647) y sus configuraciones ganadoras comparten una regularización L1 elevada, coherente con la separación observada entre las curvas de error de entrenamiento y validación del modelo sin ajustar. Ambas búsquedas seleccionan el juego de rezagos ampliado con `lag_56`.
+
+El control de sobreajuste requiere una adaptación para los modelos de árboles: su $R^2$ in-sample es próximo a uno por construcción y no resulta informativo. En su lugar, la diferencia relativa se calcula entre dos evaluaciones out-of-sample al mismo horizonte de 72 horas y sobre ventanas simétricas: el modelo entrenado hasta 2023 y evaluado sobre enero–septiembre de 2024 (rendimiento en la era de entrenamiento) frente al modelo entrenado hasta 2024 y evaluado sobre la validación de enero–septiembre de 2025. Igual que en el SARIMA, ningún candidato baja del umbral del 10%, pero esa diferencia no refleja sobreajuste del modelo sino la degradación de la calidad del dato en 2025 (sección III.F), común a todas las configuraciones; por ello se aplica el criterio de respaldo, seleccionar el de mayor $R^2$ de validación documentando su diferencia relativa. Finalmente, el escalado individual de cada serie (estandarización previa al entrenamiento, invertida en la predicción) mejora tanto la precisión (especialmente en los barrios de menor consumo, que el modelo global tendía a infraponderar) como la generalización, reduciendo la diferencia relativa. El modelo final alcanza un $R^2$ mediano de validación de 0,699 con una diferencia relativa del 11,6%, frente al 0,627 del modelo con hiperparámetros por defecto.
+
+Sobre el conjunto de test (octubre–noviembre de 2025), el modelo final alcanza un $R^2$ mediano de 0,826 y un MAPE mediano del 7,7% a horizonte de 72 horas, con la degradación esperada al alargar el horizonte: 0,873 a 24 horas, 0,856 a 48 y 0,826 a 72. El análisis de residuos muestra errores centrados en cero (ausencia de sesgo sistemático) con heterocedasticidad creciente con la magnitud del consumo, comportamiento característico de la demanda eléctrica que refuerza el uso de métricas relativas. La comparativa sistemática frente a los baselines se presenta en el capítulo V.
+
+#### 4.2.2 XGBoost: hiperparametrización y selección
+
+El XGBoost se evalúa con el mismo arnés global multi-serie que el LightGBM, cambiando únicamente el regresor para aislar el efecto de la librería. La única diferencia de implementación es el tratamiento de la categórica de identidad del barrio: XGBoost requiere activar de forma explícita su soporte categórico (`enable_categorical`), donde LightGBM lo gestiona de forma nativa. El modelo con hiperparámetros por defecto alcanza un $R^2$ mediano de validación de 0,632, prácticamente idéntico al del LightGBM por defecto, con una diferencia relativa del 18,5% que evidencia sobreajuste antes de regularizar.
+
+La optimización emplea una búsqueda bayesiana de 30 iteraciones (mismo presupuesto que el LightGBM, para una comparación justa) sobre los hiperparámetros propios de XGBoost: profundidad, tasa de aprendizaje, submuestreo de filas y columnas, y la regularización mediante `gamma`, `min_child_weight` y los términos L1/L2. El candidato elegido eleva el $R^2$ de validación a 0,693 y reduce la diferencia relativa a 0,132, todavía por encima del umbral del 10% por el mismo techo de calidad del dato ya discutido.
+
+Dado que la diferencia relativa no baja del umbral, se realiza una segunda ronda de regularización probando cinco palancas sobre el candidato: escalado de las series, transformación logarítmica del objetivo, reducción del peso del periodo COVID, crecimiento del árbol por hoja (`lossguide`, que emula el comportamiento de LightGBM) y poda del número de árboles. Ninguna baja la diferencia relativa del 10%, y el escalado, la única que mejora la precisión, solo aporta 0,01 puntos de $R^2$. Aplicando la regla de un error estándar [hastie2009] (el error estándar del $R^2$ entre los 30 códigos es de unos 0,022, muy superior a esa mejora de 0,01), las dos configuraciones son estadísticamente indistinguibles, por lo que se elige la más parsimoniosa, el modelo sin escalado. La decisión es además coherente con la naturaleza de los árboles, invariantes a las transformaciones monótonas de los predictores, a diferencia de lo observado en el LightGBM, donde el escalado sí aportó una mejora consistente.
+
+Sobre el conjunto de test, el XGBoost final alcanza un $R^2$ mediano de 0,846 (media 0,800) y un MAPE mediano del 6,6% a 72 horas, mejorando al modelo por defecto (0,829) en 27 de los 30 códigos postales. Es, nominalmente, el mejor modelo del estudio, si bien su ventaja sobre el LightGBM no resulta estadísticamente significativa (sección V.A). El análisis de residuos reproduce el patrón del LightGBM (errores centrados en cero con heterocedasticidad creciente) y pone de manifiesto una limitación estructural de los modelos de árboles: la subestimación sistemática de los picos de consumo extremo, que no pueden extrapolar por encima del rango visto en entrenamiento y que se acentúa al alargar el horizonte; en el horizonte day-ahead (24 horas), el más relevante operativamente, esa subestimación es mínima.
+
+#### 4.2.3 Importancia de variables (SHAP)
+
+La explicabilidad del modelo se analiza mediante valores SHAP [lundberg2017] sobre el conjunto de validación. Los resultados confirman la estructura identificada en el EDA: la autorregresión domina la predicción (los rezagos de 6 y 24 horas y el de una semana concentran la mayor contribución), seguida del calendario (hora del día y día de la semana) y de la identidad del barrio. Las variables meteorológicas explícitas aportan una contribución secundaria: a corto plazo y con consumo reciente disponible, la dinámica térmica queda mayoritariamente absorbida por la propia autorregresión, en línea con la evidencia de que el efecto de la temperatura sobre la demanda eléctrica española es significativo pero queda parcialmente capturado por la estructura rezagada de la serie [pardo2002]. Esto no contradice el papel causal de la temperatura documentado en la literatura, sino que delimita su valor predictivo incremental en horizontes cortos. Las variables de menor contribución (`hora_x_finde`, `cdd_roll_3d` y el perfil sectorial) se identifican como candidatas a poda: el modelo de árboles las absorbe por otras vías, ya que la interacción hora–fin de semana se reconstruye mediante particiones anidadas sobre la hora y el indicador de fin de semana, mientras que tanto la inercia térmica acumulada en `cdd_roll_3d` como el perfil sectorial del barrio quedan subsumidos en la identidad del código postal y en la autorregresión reciente.
+
+#### 4.2.4 Selección de predictores (RFECV)
+
+El análisis SHAP señala variables prescindibles, pero no constituye por sí mismo un criterio formal de poda. Para verificarlo de forma sistemática se aplica una eliminación recursiva de predictores con validación cruzada (RFECV) sobre el bloque de variables exógenas del modelo global, conservando los rezagos y los estadísticos de ventana, siguiendo el procedimiento de selección de predictores habitual en el ecosistema skforecast [skforecast]. El selector parte del conjunto completo de exógenas, estima la importancia de cada una y elimina iterativamente la menos relevante, reevaluando el rendimiento por validación cruzada hasta que retirar más variables deja de aportar mejora. Para acotar el coste, la búsqueda emplea un submuestreo de los datos de entrenamiento, según la recomendación de que la selección de predictores no requiere ni todo el dato ni el modelo más complejo. El procedimiento retiene 19 de las 22 variables exógenas disponibles, descartando tres de aportación marginal. Al re-evaluar el modelo final sobre el conjunto de test con el subconjunto reducido, el R² mediano se mantiene esencialmente igual (diferencia inferior a 0,01 puntos). Esto confirma que esas tres variables pueden eliminarse sin pérdida apreciable de precisión, simplificando el modelo y reduciendo su riesgo de sobreajuste de cara al despliegue.
+
+### 4.3 Deep Learning: LSTM / GRU
+
+#### 4.3.1 Arquitectura y secuencias de entrada
+
+#### 4.3.2 Ajuste de hiperparámetros
+
+## 5. Resultados
+
+Este capítulo reúne la evaluación comparativa de las familias de modelos desarrolladas en el capítulo IV bajo un único arnés de backtesting. Todos los modelos comparten el mismo split temporal, el mismo conjunto de 30 códigos postales con series íntegras (sección III.F) y el mismo periodo de test reservado (octubre–noviembre de 2025), lo que garantiza que las diferencias observadas son atribuibles al modelo y no al protocolo de evaluación. Siguiendo el criterio adoptado en el análisis exploratorio, la mediana entre códigos postales se emplea como estadístico de referencia por ser más representativa del barrio típico y robusta frente a los pocos códigos de consumo casi nulo que distorsionan la media; la media se reporta en paralelo para la comparación agregada. Conviene precisar que el conjunto de test abarca únicamente dos meses (octubre y noviembre de 2025), una ventana corta y, además, de volatilidad superior a la histórica (sección III.F); las cifras de este capítulo deben leerse, por tanto, como una estimación del rendimiento en el periodo más reciente y exigente disponible, no como un promedio anual.
+
+### 5.1 Comparativa de modelos por métrica (MAE, RMSE, MAPE, WMAPE, R²)
+
+La tabla (tab:comparativa) resume el rendimiento de las cinco configuraciones sobre el conjunto de test al horizonte principal de 72 horas. Los dos modelos de gradient boosting lideran todas las métricas: el XGBoost global es el mejor, con un R² mediano de 0,846, seguido del LightGBM (0,826); ambos superan con holgura a los modelos estadísticos (SARIMA 0,808 y SARIMAX 0,788) y al *naive* estacional (0,722). El salto de calidad relevante se da entre los modelos clásicos y los de árboles, no entre los dos modelos de árboles entre sí.
+
+**Tabla.** Métricas medianas entre los 30 códigos postales del conjunto de evaluación (test octubre–noviembre 2025, horizonte 72 horas). El WMAPE *pooled* es el agregado ponderado por volumen; el resto son medianas entre códigos. En negrita, el mejor valor de cada columna.
+
+| Modelo | R² | MAPE (%) | WMAPE (%) | WMAPE *pooled* (%) |
+|---|---|---|---|---|
+| *Naive* estacional | 0,722 | 9,4 | 9,7 | 10,2 |
+| SARIMA | 0,808 | 8,4 | 8,3 | 8,3 |
+| SARIMAX | 0,788 | 8,6 | 8,5 | 8,4 |
+| LightGBM (global) | 0,826 | 7,7 | 7,5 | 7,5 |
+| XGBoost (global) | **0,846** | **6,6** | **6,3** | **7,2** |
+
+{\footnotesize\raggedright El SARIMAX se evalúa sobre 29 códigos postales: en el 08031 el ajuste no convergió y se excluye. Los valores de MAE y RMSE en MWh por modelo se registran en los ficheros de resultados por código postal.\par}
+
+El MAPE resulta sensible a los códigos postales de consumo muy bajo, donde un error absoluto pequeño se traduce en un porcentaje desproporcionado. Por ello se reporta también el WMAPE (*Weighted MAPE*), que pondera el error por el volumen de consumo y ofrece un agregado más representativo del conjunto [hyndman2021]: bajo esta métrica la jerarquía se mantiene, con el XGBoost en cabeza (6,3% de mediana) por delante del LightGBM (7,5%), el SARIMA (8,3%), el SARIMAX (8,5%) y el *naive* (9,7%).
+
+De esta comparativa se extraen cuatro lecturas. La primera es que cada escalón de complejidad se justifica salvo uno: el SARIMA supera con claridad al *naive* y los modelos de árboles superan al SARIMA, pero el SARIMAX no mejora al SARIMA univariante, lo que confirma que el valor predictivo incremental de las variables exógenas en horizontes cortos es marginal una vez que la autorregresión y la estacionalidad capturan la dinámica de la serie. La segunda es que los modelos globales de árboles, entrenados de forma conjunta sobre los 30 códigos, superan a los modelos estadísticos ajustados serie a serie, en línea con la ventaja de los modelos globales al estimar los patrones compartidos con la información agregada de todas las series [montero2021]; la superioridad del XGBoost sobre el SARIMA es estadísticamente significativa: mejora el R² en 26 de los 30 códigos postales, con un p-valor inferior a 0,001 en un test de Wilcoxon pareado sobre el R² por código (estadístico $W=34$). La tercera es que, entre los dos modelos de árboles, el XGBoost queda nominalmente por encima del LightGBM (0,846 frente a 0,826 de R² mediano), pero esa ventaja **no** es estadísticamente significativa (gana en 18 de 30 códigos, $p=0,19$ en el mismo test de Wilcoxon): ambos empatan, y el salto de calidad real está entre los modelos clásicos y los de árboles, no entre las dos librerías de gradient boosting. La cuarta es que la mejora se concentra especialmente en los códigos postales de consumo más volátil, precisamente donde el *naive* y el SARIMA acumulan los mayores errores relativos.
+
+### 5.2 Backtesting por horizonte de predicción (24h, 48h, 72h)
+
+El mismo arnés de backtesting se aplica a los tres horizontes objetivo reutilizando cada ajuste y variando únicamente el número de bloques proyectados. La tabla (tab:horizonte) recoge el R² mediano por horizonte. El comportamiento es el esperado: la precisión se degrada de forma monótona al alejar el horizonte, ya que el error se acumula a lo largo de la predicción recursiva. Los dos modelos de árboles mantienen la ventaja sobre los estadísticos en los tres horizontes, con el XGBoost en cabeza (0,884, 0,867 y 0,846 a 24, 48 y 72 horas) seguido del LightGBM, y el SARIMAX permanece por debajo del SARIMA también en cada horizonte.
+
+**Tabla.** R² mediano por horizonte de predicción sobre los 30 códigos postales del conjunto de evaluación (test octubre–noviembre 2025).
+
+| Modelo | 24h | 48h | 72h |
+|---|---|---|---|
+| SARIMA | 0,831 | 0,818 | 0,808 |
+| SARIMAX | 0,815 | 0,801 | 0,788 |
+| LightGBM (global) | 0,873 | 0,856 | 0,826 |
+| XGBoost (global) | **0,884** | **0,867** | **0,846** |
+
+La degradación es además moderada: el LightGBM pierde solo 0,047 puntos de R² entre las 24 y las 72 horas (de 0,873 a 0,826), lo que indica que el horizonte de 72 horas, el más útil para la alerta temprana por su mayor margen de actuación, sigue ofreciendo una precisión operativamente aprovechable. El XGBoost mantiene la ventaja en los tres horizontes (0,884 a 24h, 0,867 a 48h y 0,846 a 72h), por encima del LightGBM en todos ellos, y con una degradación igualmente moderada (0,038 puntos entre 24 y 72 horas).
+
+### 5.3 Evaluación de detección de picos
+
+#### 5.3.1 Tasa de detección vs. tasa de falsas alarmas (umbral p90)
+
+La evaluación formal de la capacidad de detección de picos críticos (tasa de detección frente a tasa de falsas alarmas sobre un umbral del percentil 90 del consumo) se integra con el módulo de alerta del capítulo VI, ya que requiere fijar la regla de etiquetado de pico que define el sistema de alerta. Como primera evidencia cuantitativa de la fiabilidad de las bandas de alerta, el modelo final se acompaña de intervalos de predicción al 80% construidos a partir de los residuos *out-of-sample* de validación (percentiles 10 y 90 por código postal) y trasladados al test. La cobertura empírica resultante es de 90,6% de mediana (87,2% de media) frente al 80% nominal. Esta desviación al alza es, en rigor, una **sobre-cobertura**: la banda captura el consumo real con más frecuencia de la pedida, lo que se traduce en intervalos más anchos de lo estrictamente necesario. Para una alerta temprana, errar por exceso de cautela es preferible a dejar fuera de banda los picos reales, por lo que el comportamiento es operativamente aceptable; no obstante, los intervalos son recalibrables. La construcción actual emplea percentiles globales de los residuos *out-of-sample* por código postal; condicionar esos residuos al rango de la predicción mediante predicción conformal (*binning* por nivel previsto), tal como recoge la literatura de forecasting probabilístico con skforecast [skforecast], permitiría estrechar la banda manteniendo la cobertura cerca del objetivo, y se plantea como refinamiento del módulo de alerta.
+
+#### 5.3.2 Análisis por barrio y estación del año
+
+El rendimiento del modelo final es marcadamente heterogéneo entre barrios, en coherencia con la heterogeneidad estructural documentada en el EDA. El R² de test oscila entre un máximo de 0,95 en los códigos de consumo grande y estable y un mínimo en torno a 0,2 en uno de los códigos más pequeños y volátiles, con una mediana de 0,826. Los barrios dominados por el sector servicios, con patrón semanal marcado, son los más predecibles; los de fuerte componente residencial periférico, con mayor irregularidad, concentran los errores relativos más altos. Esta dispersión refuerza la decisión de reportar la mediana como estadístico de referencia y motiva que el sistema de alerta opere con umbrales calibrados por barrio en lugar de un umbral global único.
+
+### 5.4 Explicabilidad: análisis SHAP
+
+El análisis de importancia de variables mediante valores SHAP sobre el modelo final (detallado en la sección IV.B.3) confirma la estructura identificada en el EDA y explica el resultado de la comparativa. La predicción está dominada por la autorregresión: los rezagos de 6 y 24 horas y el eco semanal (`lag_28`) concentran la mayor contribución, seguidos por las variables de calendario (hora del día y día de la semana) y por la identidad del código postal, que el modelo global incorpora de forma explícita como categoría. Las variables meteorológicas aportan una contribución secundaria, lo que reproduce a nivel de explicabilidad el mismo fenómeno observado en la comparativa SARIMA frente a SARIMAX: con el consumo reciente disponible, la señal térmica queda mayoritariamente absorbida por la autorregresión [pardo2002]. Las variables de menor contribución (`hora_x_finde`, `cdd_roll_3d` y el perfil sectorial) se identifican como candidatas a poda, al quedar subsumidas en la identidad del barrio y en la estructura rezagada de la serie.
+
+### 5.5 Selección del modelo final
+
+A la luz de los resultados, los dos modelos de gradient boosting encabezan la comparativa y empatan estadísticamente entre sí (sección V.A): el XGBoost alcanza el mayor R² mediano de test (0,846 frente a 0,826 del LightGBM), pero la diferencia no es significativa. Se selecciona el **LightGBM global multi-serie** (tuneado mediante búsqueda bayesiana y con escalado individual por serie) como modelo final del sistema, por reunir, además de una precisión equivalente, el desarrollo operativo completo. La decisión se apoya en cuatro argumentos. En precisión, encabeza la comparativa junto al XGBoost, con un R² mediano de test de 0,826 y un MAPE mediano del 7,7% a 72 horas. En robustez, su diferencia relativa entre entrenamiento y validación es del 11,6%; como en el resto de modelos, supera el umbral del 10% no por sobreajuste del modelo sino por el techo que impone la degradación de la calidad del dato en 2025 (sección III.F). En operatividad, un único modelo global predice los 30 códigos postales de forma simultánea, frente a los 30 ajustes independientes que exigen los modelos estadísticos, lo que simplifica el despliegue y el mantenimiento del sistema de alerta. Y en utilidad para la alerta temprana, dispone de intervalos de predicción al 80% con una cobertura empírica del 90,6% de mediana y de un conjunto de predictores depurado mediante RFECV. El artefacto resultante se congela en dos versiones (un modelo de evaluación, ajustado hasta el fin de validación, que reproduce el número de test, y un modelo de despliegue, reentrenado con todos los datos disponibles) que alimentan el dashboard y el sistema de alerta descritos en el capítulo VI. El XGBoost queda como confirmación de que el resultado no depende de la librería concreta de gradient boosting. Las arquitecturas de aprendizaje profundo (LSTM/GRU), previstas como tercer escalón de la progresión, quedan pendientes de evaluación bajo este mismo arnés y se discuten en las líneas futuras.
+
+## 6. Dashboard y Sistema de Alerta
+
+### 6.1 Diseño del dashboard por barrio
+
+### 6.2 Visualización de predicciones y niveles de alerta
+
+## 7. Conclusiones y Líneas Futuras
+
+### 7.1 Conclusiones
+
+### 7.2 Estudio económico
+
+### 7.3 Consideraciones éticas y sociales
+
+### 7.4 Líneas futuras de trabajo
+
+#### 7.4.1 Temporal Fusion Transformer (TFT)
+
+#### 7.4.2 Graph Neural Networks para topología de red
+
+#### 7.4.3 Despliegue en nube (AWS ECS Fargate, DocumentDB)
+
+### 7.5 Aspectos técnicos y reproducibilidad
+
+#### 7.5.1 Repositorio y documentación del código
+
+#### 7.5.2 Descripción del pipeline completo
+
+IEA. *Global Energy Review 2025: Electricity*. International Energy Agency, 2025.
+https://www.iea.org/reports/global-energy-review-2025/electricity
+
+El Dakhakhni, W. Machine learning long-term electricity demand forecasting system for strategic energy investments. *Scientific Reports*, 16, 12471, 2026.
+https://doi.org/10.1038/s41598-026-45123-x
+
+Ajuntament de Barcelona. *Energy Observatory*. Barcelona Energia, 2022.
+https://www.energia.barcelona/en/barcelona-energy/energy-observatory
+
+Salvati, A., Coch, H. & Cecere, C. Assessing the urban heat island and its energy impact on residential buildings in Mediterranean climate: Barcelona case study. *Energy and Buildings*, 146, 38–54, 2017.
+https://doi.org/10.1016/j.enbuild.2017.04.025
+
+Marí-Dell'Olmo, M., Oliveras, L., Vergara-Hernández, C. et al. Geographical inequalities in energy poverty in a Mediterranean city: Using small-area Bayesian spatial models. *Energy Reports*, 8, 1249–1259, 2022.
+https://doaj.org/article/e153cdd4fc4b4e818bab3d343c1a78fd
+
+Moreno, R. et al. Analysis and enhancement of Barcelona's power grid resilience. *Energy Reports*, 8, 2022.
+https://www.sciencedirect.com/science/article/pii/S2352484722015621
+
+Endesa. *Endesa has drafted the electricity grid for Barcelona to transform it into the digital city of the future*. Endesa Press Room, 2021.
+https://www.endesa.com/en/press/press-room/news/energy-transition/smart-grids/endesa-drafted-electricity-grid-barcelona-transform-into-digital-city-future
+
+Jiang, Q. et al. Predicting building energy consumption in urban neighborhoods using machine learning algorithms. *Frontiers of Urban and Rural Planning*, 2, 6, 2024.
+https://doi.org/10.1007/s44243-024-00032-3
+
+Ugbehe, P. et al. Electricity demand forecasting methodologies and applications: a review. *Sustainable Energy Research*, 12, 19, 2025.
+https://doi.org/10.1186/s40807-025-00149-z
+
+Melicio, R. et al. Short-Term Load Forecasting of Electricity Demand for the Residential Sector Based on Modelling Techniques: A Systematic Review. *Energies*, 16(10), 4098, 2023.
+https://doi.org/10.3390/en16104098
+
+Hyndman, R.J. & Athanasopoulos, G. *Forecasting: Principles and Practice*, 3ª ed. OTexts, 2021.
+https://otexts.com/fpp3
+
+Box, G.E.P., Jenkins, G.M., Reinsel, G.C. & Ljung, G.M. *Time Series Analysis: Forecasting and Control*, 5ª ed. Wiley, 2015.
+
+Eke, C.S. et al. Electricity demand forecasting methodologies and applications: a review. *Sustainable Energy Research*, 12, 2025.
+https://doi.org/10.1186/s40807-025-00149-z
+
+Chen, T. & Guestrin, C. XGBoost: A Scalable Tree Boosting System. *Proceedings of the 22nd ACM SIGKDD*, 785–794, 2016.
+https://doi.org/10.1145/2939672.2939785
+
+Ke, G. et al. LightGBM: A Highly Efficient Gradient Boosting Decision Tree. *Advances in Neural Information Processing Systems (NeurIPS)*, 30, 2017.
+
+Hastie, T., Tibshirani, R. & Friedman, J. *The Elements of Statistical Learning: Data Mining, Inference, and Prediction*. 2.^a ed., Springer, 2009.
+
+Hochreiter, S. & Schmidhuber, J. Long Short-Term Memory. *Neural Computation*, 9(8), 1735–1780, 1997.
+https://doi.org/10.1162/neco.1997.9.8.1735
+
+Cho, K., van Merriënboer, B., Gulcehre, C., Bahdanau, D., Bougares, F., Schwenk, H. & Bengio, Y. Learning Phrase Representations using RNN Encoder-Decoder for Statistical Machine Translation. *Proceedings of EMNLP 2014*, pp. 1724–1734, 2014.
+https://doi.org/10.3115/v1/D14-1179
+
+Lim, B., Arık, S.Ö., Loeff, N. & Pfister, T. Temporal Fusion Transformers for Interpretable Multi-horizon Time Series Forecasting. *International Journal of Forecasting*, 37(4), 1748–1764, 2021.
+https://doi.org/10.1016/j.ijforecast.2021.03.012
+
+Rubattu, N., Maroni, G. & Corani, G. Electricity Load and Peak Forecasting: Feature Engineering, Probabilistic LightGBM and Temporal Hierarchies. *arXiv preprint*, arXiv:2305.05575, 2023.
+https://arxiv.org/abs/2305.05575
+
+Krogstie, J. The emerging data-driven Smart City and its innovative applied solutions for sustainability: the cases of London and Barcelona. *Energy Informatics*, 3(1), 5, 2020.
+https://doi.org/10.1186/s42162-020-00108-6
+
+Yasuhiro, T. et al. Peak demand alert system based on electricity demand forecasting for smart meter data. *Energy and Buildings*, 226, 110380, 2020.
+https://doi.org/10.1016/j.enbuild.2020.110380
+
+Wu, D. et al. Predicting Peak Day and Peak Hour of Electricity Demand with Ensemble Machine Learning. *arXiv preprint*, arXiv:2203.13886, 2022.
+https://arxiv.org/abs/2203.13886
+
+Khediri, A., Yahiaoui, A., Laouar, M.R. & Belhocine, Y. Deep Learning Proactive Approach to Blackout Prevention in Smart Grids: An Early Warning System. *Acta Informatica Pragensia*, 13(2), 273–287, 2024.
+https://doi.org/10.18267/j.aip.246
+
+Suri, D. & Mangal, M. PowerGNN: A Topology-Aware Graph Neural Network for Electricity Grids. *arXiv preprint*, arXiv:2503.22721, 2025.
+https://doi.org/10.48550/arXiv.2503.22721
+
+Kuru, M. & Calis, G. Forecasting Heating Degree Days for Energy Demand Modeling. *Proceedings of the Creative Construction Conference 2019*, pp. 713–718, 2019.
+https://doi.org/10.3311/CCC2019-097
+
+Gassar, A.A.A. Short-Term Energy Forecasting to Improve the Estimation of Demand Response Baselines in Residential Neighborhoods: Deep Learning vs. Machine Learning. *Buildings*, 14(7), 2242, 2024.
+https://doi.org/10.3390/buildings14072242
+
+Eurostat. *Cooling and heating degree days statistics (nrg_chdd): Reference Metadata*. European Commission, 2024.
+https://ec.europa.eu/eurostat/cache/metadata/en/nrg_chdd_esms.htm
+
+Ortiz-Beviá, M.J., Sánchez-López, G., Alvarez-García, F.J. & Ruiz de Elvira, A. Evolution of heating and cooling degree-days in Spain: Trends and interannual variability. *Global and Planetary Change*, 92–93, 236–247, 2012.
+https://doi.org/10.1016/j.gloplacha.2012.05.023
+
+Giannakopoulos, C. & Psiloglou, B.E. Trends in energy load demand for Athens, Greece: weather and non-weather related factors. *Climate Research*, 31, 97–108, 2006.
+https://doi.org/10.3354/cr031097
+
+Pardo, A., Meneu, V. & Valor, E. Temperature and seasonality influences on Spanish electricity load. *Energy Economics*, 24(1), 55–70, 2002.
+https://doi.org/10.1016/S0140-9883(01)00082-2
+
+Rajabi, A., Eskandari, M., Jabbari Ghadi, M., Li, L., Zhang, J. & Siano, P. A comparative study of clustering techniques for electrical load pattern segmentation. *Renewable and Sustainable Energy Reviews*, 120, 109628, 2020.
+https://doi.org/10.1016/j.rser.2019.109628
+
+Montero-Manso, P. & Hyndman, R.J. Principles and algorithms for forecasting groups of time series: Locality and globality. *International Journal of Forecasting*, 37(4), 1632–1653, 2021.
+https://doi.org/10.1016/j.ijforecast.2021.03.004
+
+Amat Rodrigo, J. & Escobar Ortiz, J. *skforecast: time series forecasting with Python and scikit-learn*. Zenodo, 2024.
+https://doi.org/10.5281/zenodo.8382788
+
+Akiba, T., Sano, S., Yanase, T., Ohta, T. & Koyama, M. Optuna: A Next-generation Hyperparameter Optimization Framework. *Proceedings of the 25th ACM SIGKDD International Conference on Knowledge Discovery & Data Mining*, 2623–2631, 2019.
+https://doi.org/10.1145/3292500.3330701
+
+Lundberg, S.M. & Lee, S.-I. A Unified Approach to Interpreting Model Predictions. *Advances in Neural Information Processing Systems (NeurIPS)*, 30, 4765–4774, 2017.
+
+## 8. Diccionario de datos
+
+## 9. Configuración Docker y CI/CD
+
+## 10. Código fuente relevante
+

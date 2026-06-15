@@ -754,7 +754,7 @@ De esta comparativa se extraen cuatro lecturas. La primera es que cada escalón 
 
 \subsection{Backtesting por horizonte de predicción (24h, 48h, 72h)}
 
-El mismo arnés de backtesting se aplica a los tres horizontes objetivo reutilizando cada ajuste y variando únicamente el número de bloques proyectados. La tabla~\ref{tab:horizonte} recoge el R\textsuperscript{2} mediano por horizonte. El comportamiento es el esperado: la precisión se degrada de forma monótona al alejar el horizonte, ya que el error se acumula a lo largo de la predicción recursiva. El LightGBM mantiene la ventaja sobre los modelos estadísticos en los tres horizontes, con una diferencia estable en torno a 0,03--0,05 puntos de R\textsuperscript{2} frente al SARIMA, y el SARIMAX permanece por debajo del SARIMA también en cada horizonte.
+El mismo arnés de backtesting se aplica a los tres horizontes objetivo reutilizando cada ajuste y variando únicamente el número de bloques proyectados. La tabla~\ref{tab:horizonte} recoge el R\textsuperscript{2} mediano por horizonte. El comportamiento es el esperado: la precisión se degrada de forma monótona al alejar el horizonte, ya que el error se acumula a lo largo de la predicción recursiva. Los dos modelos de árboles mantienen la ventaja sobre los estadísticos en los tres horizontes, con el XGBoost en cabeza (0,884, 0,867 y 0,846 a 24, 48 y 72 horas) seguido del LightGBM, y el SARIMAX permanece por debajo del SARIMA también en cada horizonte.
 
 \begin{table}[htbp]
 \centering
@@ -766,13 +766,13 @@ Modelo & 24h & 48h & 72h \\
 \midrule
 SARIMA & 0,831 & 0,818 & 0,808 \\
 SARIMAX & 0,815 & 0,801 & 0,788 \\
-LightGBM (global) & \textbf{0,873} & \textbf{0,856} & 0,826 \\
-XGBoost (global) & -- & -- & \textbf{0,846} \\
+LightGBM (global) & 0,873 & 0,856 & 0,826 \\
+XGBoost (global) & \textbf{0,884} & \textbf{0,867} & \textbf{0,846} \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-La degradación es además moderada: el LightGBM pierde solo 0,047 puntos de R\textsuperscript{2} entre las 24 y las 72 horas (de 0,873 a 0,826), lo que indica que el horizonte de 72 horas, el más útil para la alerta temprana por su mayor margen de actuación, sigue ofreciendo una precisión operativamente aprovechable. El XGBoost mantiene una ligera ventaja en el horizonte principal de 72 horas (R\textsuperscript{2} mediano de 0,846); su desglose a 24 y 48 horas se completará con el backtest por horizonte específico.
+La degradación es además moderada: el LightGBM pierde solo 0,047 puntos de R\textsuperscript{2} entre las 24 y las 72 horas (de 0,873 a 0,826), lo que indica que el horizonte de 72 horas, el más útil para la alerta temprana por su mayor margen de actuación, sigue ofreciendo una precisión operativamente aprovechable. El XGBoost mantiene la ventaja en los tres horizontes (0,884 a 24h, 0,867 a 48h y 0,846 a 72h), por encima del LightGBM en todos ellos, y con una degradación igualmente moderada (0,038 puntos entre 24 y 72 horas).
 
 \subsection{Evaluación de detección de picos}
 
